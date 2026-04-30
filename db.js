@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS users (
 db.run(`
 INSERT OR IGNORE INTO users (username, password, role)
 VALUES 
-('rey', 'annediaZ2', 'developer'),
+('rey', '123456c', 'developer'),
 ('admin', 'admin123', 'admin'),
 ('user', 'user123', 'user')
 `);
