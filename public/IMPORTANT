@@ -1,0 +1,29 @@
+npm install (Install dependencies)
+ngrok http 3000 (For Free Server Domain)
+node webhook.js (Run App)
+
+.\ngrok http 3000
+
+
+
+git --version
+
+git rm --cached .env
+git rm --cached credentials.json
+git rm --cached database.db
+git rm --cached database.sqbpro
+git rm -r --cached uploads
+git rm -r --cached temp
+
+git add .
+git commit -m "remove sensitive files"
+
+
+git remote add origin https://github.com/YOUR_USERNAME/ew-payment-bot.git
+git branch -M main
+git push -u origin main
+
+
+
+Optional to remove .git folder if you want to start fresh without git history:
+Remove-Item -Recurse -Force .git

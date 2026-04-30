@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin Portal</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      font-family: 'Segoe UI', sans-serif;
+      background: #1f2d3d;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: radial-gradient(circle at top, #334155, #1e293b 60%);
+    }
+
+    /* 🔵 Animated blobs */
+    .blob {
+      position: absolute;
+      border-radius: 50%;
+      opacity: 0.25;
+      filter: blur(40px);
+    }
+
+    .blob1 {
+      width: 300px; height: 300px;
+      background: #8b5cf6;
+      top: -80px; left: -80px;
+    }
+
+    .blob2 {
+      width: 200px; height: 200px;
+      background: #ec4899;
+      bottom: 100px; left: 120px;
+    }
+
+    .blob3 {
+      width: 300px; height: 300px;
+      background: #6366f1;
+      bottom: -120px; right: -100px;
+    }
+
+    /* 🧊 Glass card */
+    .login-card {
+      position: relative;
+      width: 360px;
+      padding: 40px 30px 30px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.05);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      text-align: center;
+      color: #fff;
+    }
+
+    @keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+  100% { transform: translateY(0px); }
+}
+
+.login-card {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes moveBlob {
+  0% { transform: translate(0, 0); }
+  50% { transform: translate(20px, -20px); }
+  100% { transform: translate(0, 0); }
+}
+
+.blob1 { animation: moveBlob 12s infinite ease-in-out; }
+.blob2 { animation: moveBlob 10s infinite ease-in-out; }
+.blob3 { animation: moveBlob 14s infinite ease-in-out; }
+
+    /* 🟣 Logo badge */
+    .logo {
+  position: absolute;
+  top: -55px; /* move higher */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 110px;   /* 🔥 bigger */
+  height: 110px;  /* 🔥 bigger */
+  border-radius: 50%;
+  background: rgba(255,255,255,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(255,255,255,0.2);
+  box-shadow:
+    0 15px 40px rgba(0,0,0,0.6),
+    0 0 40px rgba(99,102,241,0.8); /* stronger glow */
+}
+
+.logo img {
+  width: 120%;
+  height: 120%;
+  object-fit: cover;
+  border-radius: 50%;
+  transform: scale(1.2); /* zoom in */
+}
+
+    h2 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+      margin-top: 20px;
+      margin-bottom: 5px;
+    }
+
+    .subtitle {
+  font-size: 13px;
+  color: #94a3b8;
+  text-shadow: 0 0 6px rgba(255,255,255,0.1);
+}
+.login-card:hover {
+  transform: translateY(-3px);
+  transition: 0.2s;
+}
+
+    .input-group {
+      margin-bottom: 12px;
+      text-align: left;
+    }
+
+    .input-group label {
+      font-size: 11px;
+      color: #bbb;
+    }
+
+    .input-group input {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      border-radius: 8px;
+      border: none;
+      outline: none;
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      transition: 0.2s;
+    }
+
+    .input-group input:focus {
+  box-shadow: 0 0 0 2px #3b82f6, 0 0 10px rgba(59,130,246,0.5);
+  background: rgba(255,255,255,0.15);
+}
+
+    .login-btn {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      border-radius: 8px;
+      border: none;
+      background: linear-gradient(90deg, #3b82f6, #6366f1);
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.2s;
+      box-shadow: 0 5px 20px rgba(59,130,246,0.4);
+    }
+
+    .login-btn:hover {
+      transform: scale(1.03);
+      opacity: 0.9;
+      box-shadow: 0 8px 25px rgba(99,102,241,0.6);
+    }
+
+    .login-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .error {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #f87171;
+    }
+
+    .footer {
+      margin-top: 15px;
+      font-size: 12px;
+      color: #aaa;
+    }
+
+    @keyframes pulse {
+  0% { box-shadow: 0 0 15px rgba(99,102,241,0.5); }
+  50% { box-shadow: 0 0 30px rgba(99,102,241,0.9); }
+  100% { box-shadow: 0 0 15px rgba(99,102,241,0.5); }
+}
+
+.logo {
+  animation: pulse 3s infinite;
+}
+  </style>
+</head>
+
+<body>
+
+<div class="blob blob1"></div>
+<div class="blob blob2"></div>
+<div class="blob blob3"></div>
+
+<div class="login-card">
+
+  <!-- 🔥 YOUR LOGO HERE -->
+  <div class="logo">
+    <img src="/logo.png" alt="logo">
+  </div>
+
+  <h2>ESS Control Center</h2>
+  <div class="subtitle">Authorized users only — system protected</div>
+
+  <div class="input-group">
+    <label>USERNAME</label>
+    <input id="username" placeholder="Enter username">
+  </div>
+
+  <div class="input-group">
+    <label>PASSWORD</label>
+    <input id="password" type="password" placeholder="Enter password">
+  </div>
+
+  <button class="login-btn" onclick="login()" id="loginBtn">LOGIN</button>
+
+  <div id="error" class="error"></div>
+
+  <div class="footer">Forgot password?</div>
+</div>
+
+<script>
+async function login() {
+  const btn = document.getElementById("loginBtn");
+  const username = document.getElementById("username").value;
+  const password = document.getElementById("password").value;
+  const errorEl = document.getElementById("error");
+
+  errorEl.innerText = "";
+
+  btn.innerText = "Logging in...";
+  btn.disabled = true;
+
+  try {
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      credentials: "include",
+      body: JSON.stringify({ username, password })
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      window.location.href = "/";
+    } else {
+      errorEl.innerText = "Invalid username or password";
+    }
+
+  } catch (err) {
+    errorEl.innerText = "Server error";
+  }
+
+  btn.innerText = "LOGIN";
+  btn.disabled = false;
+}
+
+/* 🔥 Enter key support */
+document.addEventListener("keydown", function(e) {
+  if (e.key === "Enter") login();
+});
+</script>
+
+</body>
+</html>

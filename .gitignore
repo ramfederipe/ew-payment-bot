@@ -1,0 +1,7 @@
+node_modules/
+.env
+credentials.json
+database.db
+*.sqbpro
+uploads/
+temp/

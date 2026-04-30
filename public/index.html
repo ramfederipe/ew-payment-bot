@@ -1,0 +1,6555 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ESS Admin Panel</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    .app-container {
+  display: flex;
+  height: 100vh;
+}
+
+.right-tools {
+  margin-left: auto;
+}
+
+.export-btn {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  border: none;
+  color: white;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.export-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+.fullscreen-log {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh !important;
+  z-index: 9999;
+  border-radius: 0;
+}
+
+.active-row {
+  background-color: #dbeafe !important;
+  transition: background 0.2s ease;
+}
+
+.locked-row {
+  background: #fee2e2 !important;
+}
+
+.conflict-row {
+  background-color: #fef3c7 !important;
+}
+
+.claimed-row {
+  background-color: #fecaca !important;
+}
+
+.toast-container {
+  position: fixed;
+  top: 60px;
+  right: 20px;
+  z-index: 100000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.premium-toast {
+  min-width: 250px;
+  max-width: 320px;
+  padding: 12px 16px;
+  border-radius: 12px;
+
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+
+  background: linear-gradient(145deg, #0f172a, #020617);
+  border: 1px solid rgba(255,255,255,0.08);
+
+  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+  backdrop-filter: blur(10px);
+
+  opacity: 0;
+  transform: translateX(40px);
+  transition: all 0.3s ease;
+}
+
+.premium-toast.show {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* TYPES */
+.premium-toast.success {
+  background: linear-gradient(135deg, #16a34a, #22c55e);
+}
+
+.premium-toast.error {
+  background: linear-gradient(135deg, #dc2626, #ef4444);
+}
+
+.premium-toast.warning {
+  background: linear-gradient(135deg, #f59e0b, #fbbf24);
+}
+
+.premium-toast.info {
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+}
+
+/* CONTENT */
+.toast-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toast-icon {
+  font-size: 16px;
+}
+
+.active-cell {
+  background-color: #c6efce !important;
+  color: #006100 !important;
+}
+
+.copyable {
+  cursor: pointer;
+  position: relative;
+  transition: 0.2s;
+}
+
+.copyable:hover {
+  background: #e0f2fe;
+}
+
+#tbody td.copied,
+#settledTable td.copied {
+  background: #bbf7d0 !important;
+  color: #065f46;
+}
+
+td.copied {
+  background: #bbf7d0 !important;
+  color: #065f46;
+  transition: 0.15s ease;
+}
+
+.pagination-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* 👈 spreads nicely */
+  gap: 10px;
+
+  position: sticky;
+  bottom: 0;
+
+  background: #fff;
+  padding: 10px;
+  border-top: 1px solid #ddd;
+}
+
+.pagination-scroll {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  flex: 1;
+
+  overflow-x: auto;
+  gap: 6px;
+  padding: 5px;
+
+  white-space: nowrap;
+}
+
+.pagination-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.pagination-scroll::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 4px;
+}
+
+.page-btn {
+  min-width: 32px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #f1f5f9;   /* 🔥 light gray instead of white */
+  color: #111;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.page-btn:active {
+  transform: scale(0.92);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-btn:hover {
+  background: #e2e8f0;
+}
+
+.page-btn.active {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
+
+#paginationNumbers {
+  min-height: 50px;
+  border: none;
+}
+
+/* wrapper */
+.options-wrapper {
+  position: relative;
+}
+
+/* button */
+.btn-options {
+  background: #2d3748;
+  color: #e5e7eb;
+  border: 1px solid #3b4454;
+
+  padding: 6px 12px;
+  height: 34px;
+
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-options:hover {
+  background: #3b4454;
+  color: #fff;
+}
+
+/* dropdown */
+.options-menu {
+  position: absolute;
+  z-index: 10000;
+  right: 0;
+  top: 38px;
+
+  min-width: 160px;
+
+  background: #1f2937; /* dark */
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+
+  box-shadow: 0 10px 25px rgba(0,0,0,0.35);
+
+  padding: 6px 0;
+
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+  pointer-events: none;
+
+  transition: all 0.18s ease;
+}
+
+.options-menu.show {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+/* items */
+.options-menu div {
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #e5e7eb;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+/* hover */
+.options-menu div:hover {
+  background: #374151;
+  color: #fff;
+}
+
+#headerBar .btn-options {
+  background: #2d3748;   /* dark gray */
+  color: #e5e7eb;        /* soft white */
+  border: 1px solid #3b4454;
+
+  padding: 6px 12px;
+  height: 34px;
+
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  font-size: 13px;
+  cursor: pointer;
+
+  transition: all 0.2s ease;
+}
+
+.header-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  padding: 6px 12px;
+  height: 34px; /* 🔥 consistent height */
+
+  border-radius: 8px;
+  background: #2d3748;
+  color: white;
+  border: none;
+
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* overlay */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 9999;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55); /* dark blur feel */
+  backdrop-filter: blur(4px);
+  align-items: center;
+  justify-content: center;
+}
+
+/* modal box */
+.modal-content {
+  width: 100%;
+  max-width: 420px; /* 🔥 FIX WIDTH */
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 24px 26px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+  animation: modalFade 0.2s ease;
+}
+
+/* title */
+.modal-content h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 18px;
+}
+
+/* inputs */
+.modal-content input,
+.modal-content select {
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  font-size: 14px;
+  transition: 0.2s;
+}
+
+.modal-content input:focus,
+.modal-content select:focus {
+  border-color: #3b82f6;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+}
+
+/* buttons */
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btn-secondary {
+  background: #e5e7eb;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* animation */
+@keyframes modalFade {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 🔍 SEARCH FIX */
+.search-input {
+  width: 260px; /* 👈 no more full width */
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+/* dropdown consistency */
+.filter-input {
+  min-width: 150px;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+/* toolbar container */
+.toolbar-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fafafa;
+  padding: 10px;
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+
+/* left buttons */
+.left-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* right buttons */
+.right-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* subtle polish */
+.toolbar-actions button {
+  border-radius: 8px;
+}
+
+/* hover effect */
+.toolbar-actions:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.settled-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 15px;
+  padding: 10px 0;
+}
+
+/* LEFT SIDE */
+.left-tools {
+  flex: 1;
+}
+
+/* 🔍 SEARCH BAR (fixed width now) */
+#settledSearch {
+  width: 280px; /* 👈 FIXED SIZE */
+  max-width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  outline: none;
+  transition: 0.2s;
+  background: #f9f9f9;
+}
+
+#settledSearch:focus {
+  border-color: #4a90e2;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(74,144,226,0.1);
+}
+
+/* RIGHT SIDE */
+.right-tools {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* dropdown + date inputs */
+.right-tools select,
+.right-tools input[type="date"] {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  background: #fff;
+  transition: 0.2s;
+}
+
+.right-tools select:focus,
+.right-tools input:focus {
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 2px rgba(74,144,226,0.1);
+}
+
+/* subtle hover */
+.right-tools select:hover,
+.right-tools input:hover {
+  border-color: #999;
+}
+
+.sidebar {
+  width: 240px;
+  background: linear-gradient(180deg, #0f1b2d, #0b1323);
+  color: #9ca3af;
+  display: flex;
+  flex-direction: column;
+  padding: 15px 0;
+  border-right: 1px solid rgba(255,255,255,0.05);
+}
+
+/* LOGO */
+.logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  margin-bottom: 20px;
+  gap: 6px;
+}
+
+.logo img {
+  width: 36px;     /* adjust size here */
+  height: 36px;
+  object-fit: contain;
+}
+
+.logo span {
+  font-size: 25px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+/* SECTION TITLE */
+.menu-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #64748b;
+  margin: 16px 20px 6px;
+}
+
+/* MENU ITEM */
+.menu-item {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  padding: 13px 20px;
+
+  font-size: 16px;   /* 🔥 bigger (was ~14) */
+  font-weight: 500;
+  color: #94a3b8;
+
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+/* HOVER */
+.menu-item:hover {
+  background: rgba(255,255,255,0.05);
+  color: #fff;
+}
+
+/* ACTIVE (like your screenshot blue highlight) */
+.menu-item.active {
+  background: linear-gradient(90deg, #1d4ed8, #2563eb);
+  color: white;
+}
+
+/* LEFT ACTIVE GLOW */
+.menu-item.active::before {
+  background: #60a5fa;
+}
+
+/* SUBMENU */
+.submenu {
+  margin-left: 18px;
+  display: none;
+  flex-direction: column;
+}
+
+.submenu button {
+  all: unset;
+  padding: 9px 14px;
+
+  font-size: 14.5px;  /* 🔥 bigger */
+  color: #94a3b8;
+
+  cursor: pointer;
+}
+
+.submenu button:hover {
+  color: #fff;
+}
+
+.submenu button.active {
+  color: #fff;
+  font-weight: 500;
+}
+
+.main-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+#headerBar {
+  height: 50px;
+  background: #1e1e2f;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 15px;
+  border-bottom: 1px solid #333;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 9999;
+}
+
+.main-content {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  overflow-y: auto;
+  padding: 15px;
+  background: #f9fafb;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.main-content > div {
+  background: white;
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  margin-bottom: 15px;
+}
+
+.filter-bar {
+  display: grid;
+  grid-template-columns: 1fr 150px 150px 150px;
+  gap: 10px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.action-buttons button {
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.sidebar button {
+  all: unset;
+  display: block;
+  width: 100%;
+}
+
+.menu-btn {
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+
+  background: transparent !important; 
+  border: none !important;
+  color: #9ca3af !important;
+
+  text-align: left;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.menu-btn:hover {
+  background: #374151 !important;
+  color: #fff !important;
+}
+
+.menu-btn.active {
+  background: #2563eb !important;
+  color: #fff !important;
+}
+
+input, select {
+  transition: 0.2s;
+}
+
+input:focus, select:focus {
+  box-shadow: 0 0 0 2px rgba(37,99,235,0.3);
+  transform: scale(1.01);
+}
+
+#footerBar {
+  height: 35px;
+  background: #1e1e2f;
+  color: #ccc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-top: 1px solid #333;
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+#footerBar .brand {
+  color: #4CAF50;
+}
+
+#dashboardPage,
+#pendingPage,
+#settledPage,
+#chatPage,
+#walletPage,
+#balancePage,
+#groupsPage,
+#settingsPage,
+#usersPage {
+  display: none;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+}
+
+.card-box {
+  background: linear-gradient(135deg, #111827, #1f2937);
+  color: #fff;
+
+  padding: 20px;
+  border-radius: 16px;
+
+  box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+
+  position: relative;
+  overflow: hidden;
+
+  transition: all 0.25s ease;
+}
+
+.card-box:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 15px 35px rgba(0,0,0,0.35);
+}
+
+.card-title {
+  font-size: 12px;
+  color: #9ca3af;
+  letter-spacing: 0.5px;
+}
+
+.card-value {
+  font-size: 28px;
+  font-weight: 700;
+  margin-top: 6px;
+}
+
+#brandStats div,
+#brandTodayStats div {
+  background: #111827;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.card-box small {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  padding: 12px;
+  border-radius: 12px;
+
+  background: linear-gradient(135deg, #111827, #1f2937);
+  color: #fff;
+
+  margin-bottom: 8px;
+
+  transition: 0.2s;
+}
+
+.stat-row:hover {
+  transform: scale(1.01);
+  background: linear-gradient(135deg, #1f2937, #374151);
+}
+
+.brand-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.brand-card {
+  background: #ffffff;
+  padding: 14px;
+  border-radius: 14px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+}
+
+/* mobile responsive */
+@media (max-width: 768px) {
+  .brand-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* GRID FOR USER + AGENT */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+/* CARD STYLE */
+.stats-card {
+  background: #ffffff;
+  padding: 16px;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+}
+
+/* SUMMARY ROW */
+.stat-summary {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+/* SUMMARY BOX */
+.summary-box {
+  flex: 1;
+  background: linear-gradient(135deg, #111827, #1f2937);
+  color: #fff;
+  padding: 10px;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.summary-box b {
+  font-size: 18px;
+}
+
+.summary-box span {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+/* LIST ITEMS */
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px;
+  border-radius: 10px;
+  background: #111827;
+  color: #fff;
+  margin-bottom: 6px;
+  transition: 0.2s;
+}
+
+.stat-row:hover {
+  background: #1f2937;
+  transform: scale(1.01);
+}
+
+/* MOBILE */
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+</style>
+
+</head>
+
+<body>
+
+  <!-- TOAST -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <div class="app-container">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+
+  <div class="logo">
+  <img src="logo.png" alt="Logo">
+  <span>ESS PANEL</span>
+</div>
+
+  <div class="menu-section">
+    <div class="menu-title">Dashboard</div>
+
+    <button class="menu-item active" onclick="showPage(event, 'dashboard')">
+  <span>📊</span> Dashboard
+</button>
+  </div>
+
+  
+
+  <div class="menu-section">
+    <div class="menu-title">Transactions</div>
+
+    <button class="menu-item" onclick="toggleMenu('depositMenu')">
+  <span>💰</span> Deposits ▾
+</button>
+
+    <div id="depositMenu" class="submenu">
+      <button onclick="showPage(event, 'pending')">Pending Deposits</button>
+      <button onclick="showPage(event, 'settled')">Settled Deposits</button>
+      <button onclick="showPage(event, 'video')">🎥 Video Case</button>
+      <button onclick="showPage(event, 'videoSettled')">🎥 Settled Video</button>
+      <button class="menu-item" onclick="showPage(event, 'sms')">📩 SMS</button>
+    </div>
+  </div>
+
+  <div class="menu-section">
+    <div class="menu-title">Operations</div>
+
+    <button class="menu-item" onclick="showPage(event, 'chat')">💬 Chat ID</button>
+    <button class="menu-item" onclick="showPage(event, 'balance')">💰 Balance</button>
+    <button class="menu-item" onclick="showPage(event, 'wallet')">💼 Wallet</button>
+    <button class="menu-item" onclick="showPage(event, 'walletHealth')">🩺 Wallet Health</button>
+    <button class="menu-item" onclick="showPage(event, 'groups')">👥 Groups</button>
+  </div>
+
+  <div class="menu-section">
+    <div class="menu-title">System</div>
+
+    <button class="menu-item" onclick="showPage(event, 'users')">👤 Users</button>
+    <button class="menu-item" onclick="showPage(event, 'settings')">⚙ Settings</button>
+  </div>
+
+</div>
+
+    <!-- MAIN -->
+    <div class="main-wrapper">
+
+      <!-- HEADER -->
+      <div id="headerBar">
+
+        <div>
+          <b><V1 class="0 1"></V1></b>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:15px;">
+
+          <span id="timeNow"></span>
+          <span id="userInfo"></span>
+
+          <!-- OPTIONS -->
+          <div class="options-wrapper">
+  <button onclick="toggleOptions(event)" class="btn-options">
+  ⚙ Options
+</button>
+
+  <div id="optionsMenu" class="options-menu">
+    <div onclick="alert('Coming soon')">Profile</div>
+    <div onclick="alert('Coming soon')">Preferences</div>
+  </div>
+</div>
+
+          <button onclick="openChangePasswordModal()" class="btn btn-warning btn-sm">
+            🔑 Change Password
+          </button>
+
+          <button id="createUserBtn" onclick="openCreateUserModal()" class="btn btn-success btn-sm">
+            ➕ Create Account
+          </button>
+
+          <button onclick="logout()" class="btn btn-danger btn-sm">
+            Logout
+          </button>
+
+        </div>
+      </div>
+
+      <!-- MAIN CONTENT -->
+      <div class="main-content">
+
+        <!-- ALL PAGES MUST BE INSIDE HERE -->
+         <div id="dashboardPage">
+
+  <h3 class="mb-3">Dashboard Overview</h3>
+
+  <!-- TOP CARDS -->
+  <div class="dashboard-grid">
+
+    <div class="card-box" style="border-left:4px solid #f59e0b;">
+      <div class="card-title">Total Pending</div>
+      <div class="card-value" id="statPending">0</div>
+    </div>
+
+    <div class="card-box" style="border-left:4px solid #22c55e;">
+      <div class="card-title">Total Settled</div>
+      <div class="card-value" id="statSettled">0</div>
+      <small id="statApprovedRejected"></small>
+    </div>
+
+    <div class="card-box">
+      <div class="card-title">Pending Today</div>
+      <div class="card-value" id="statPendingToday">0</div>
+    </div>
+
+    <div class="card-box">
+      <div class="card-title">Settled Today</div>
+      <div class="card-value" id="statSettledToday">0</div>
+    </div>
+
+  </div>
+
+  <!-- SECOND ROW -->
+  <div class="dashboard-grid mt-3">
+
+    <div class="card-box">
+      <div class="card-title">Agent Pending</div>
+      <div class="card-value" id="statAgentPending">0</div>
+    </div>
+
+    <div class="card-box">
+      <div class="card-title">Total Amount</div>
+      <div class="card-value" id="statAmount">₱0</div>
+    </div>
+
+    <div class="card-box">
+      <div class="card-title">Active Users</div>
+      <div class="card-value" id="statUsers">0</div>
+    </div>
+
+  </div>
+
+  <div class="dashboard-section">
+
+  <!-- BRAND BREAKDOWN -->
+  <div class="brand-grid mt-4">
+
+  <div class="brand-card">
+    <h5>Pending by Brand</h5>
+    <div id="brandStats"></div>
+  </div>
+
+  <div class="brand-card">
+    <h5>Pending Today by Brand</h5>
+    <div id="brandTodayStats"></div>
+  </div>
+
+</div>
+
+  <div class="stats-grid mt-4">
+
+  <!-- 👤 USER -->
+  <div class="stats-card">
+    <h5>👤 User Settled Performance</h5>
+
+    <div id="userSummary"></div>
+    <div id="userStats"></div>
+  </div>
+
+  <!-- 👥 AGENT -->
+  <div class="stats-card">
+  <h5>👥 Agent Settled Performance</h5>
+
+  <div class="stats-grid mt-2" style="grid-template-columns: 1fr 1fr;">
+
+    <div>
+      <h6>📊 All Time</h6>
+      <div id="agentStatsAll"></div>
+    </div>
+
+    <div>
+      <h6>📅 Today</h6>
+      <div id="agentStatsToday"></div>
+    </div>
+
+  </div>
+</div>
+
+</div>
+</div>
+</div>
+
+        <div id="pendingPage">
+
+      <h3>Pending Deposits</h3>
+
+      <div id="syncStatus" style="display:none; color: orange; font-weight: bold; margin-bottom: 10px;"></div>
+
+      <div class="row mb-3 align-items-center g-2">
+
+  <!-- 🔍 SEARCH -->
+  <div class="col-auto">
+    <input type="text" id="search" class="form-control search-input" placeholder="🔍 Search Reference">
+  </div>
+
+  <!-- BRAND -->
+  <div class="col-auto">
+    <select id="brandFilter" class="form-control filter-input">
+      <option value="">All Brands</option>
+    </select>
+  </div>
+
+  <!-- AGENT PREFIX -->
+  <div class="col-auto">
+    <select id="agentPrefixFilter" class="form-control filter-input">
+  <option value="">All Agents</option>
+</select>
+  </div>
+
+  <!-- ESS -->
+  <div class="col-auto">
+    <select id="essStatusFilter" class="form-control filter-input">
+      <option value="">All ESS</option>
+    </select>
+  </div>
+
+  <!-- STATUS -->
+  <div class="col-auto">
+    <select id="statusFilter" class="form-control filter-input">
+      <option value="">All</option>
+      <option value="RECEIVED">Received</option>
+      <option value="NOT RECEIVED">Not Received</option>
+    </select>
+  </div>
+
+  <!-- SENT FILTER -->
+<!-- SENT -->
+<div class="col-auto">
+  <select id="sentFilter" class="form-control filter-input">
+    <option value="">All Sent</option>
+    <option value="1">Sent</option>
+    <option value="0">Pending</option>
+  </select>
+</div>
+
+<!-- SMS FILTER -->
+<div class="col-auto">
+  <select id="smsFilter" class="form-control filter-input">
+    <option value="">All SMS</option>
+    <option value="1">🟢 SMS Matched</option>
+    <option value="0">🔴 Not Matched</option>
+  </select>
+</div>
+
+
+</div>
+
+
+<div class="toolbar-actions">
+
+  <!-- LEFT -->
+  <div class="left-actions">
+    <button id="syncBtn" onclick="openSyncModal()" class="btn btn-outline-primary btn-sm">
+  🔄 Sync Now
+</button>
+
+    <button onclick="openDepositModal()" class="btn btn-primary btn-sm">
+      ➕ Add Deposit
+    </button>
+  </div>
+
+  <!-- RIGHT -->
+  <div id="adminActions" class="right-actions">
+    <button id="bulkSendBtn" class="btn btn-primary btn-sm">📤 Send Selected</button>
+    <button id="rematchBtn" onclick="rematchSMS()" class="btn btn-warning btn-sm">🔄 Re-match</button>
+    <button onclick="cleanEmpty()" class="btn btn-danger btn-sm">🧹 Clean Empty Rows</button>
+    <button onclick="bulkReject()" class="btn btn-danger btn-sm">❌ Reject Selected</button>
+    <button onclick="openExportModal()" class="btn btn-success btn-sm">⬇ Export Pending</button>
+  </div>
+</div>
+
+      <table class="table table-bordered table-striped">
+        <thead class="table-dark">
+          <tr>
+            <th>
+  <input type="checkbox" id="selectAll">
+</th>
+            <th>Brand</th>
+            <th>Agent</th>
+            <th>Deposit ID</th>
+            <th>Ref</th>
+            <th>Customer</th>
+            <th>Amount</th>
+            <th>Date</th>
+            <th>Agent No</th>
+            <th>Image</th>
+            <th>ESS Status</th>
+            <th>Agent Answer</th>
+            <th>Reason</th>
+            <th>Confirmed By</th> 
+            <th>Confirmed At</th>
+            <th>Sent</th>
+            <th>SMS</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+
+      <div id="depositModal" class="modal">
+  <div class="modal-content">
+    <h2 id="modalTitle">Add Deposit</h2>
+
+    <input id="agent" placeholder="Agent" />
+    <input id="depositId" placeholder="Deposit ID" />
+    <input id="ref" placeholder="Reference" />
+    <input id="customer" placeholder="Customer" />
+    <input id="amount" type="number" placeholder="Amount" />
+    <input id="date" type="date" />
+    <input id="agentNo" placeholder="Agent No" />
+    <input id="image" placeholder="Image URL" />
+
+    <div class="modal-actions">
+      <button onclick="submitDeposit()">Submit</button>
+      <button onclick="closeDepositModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+      <div id="pageInfo" style="margin-bottom:5px; font-weight:500;"></div>
+
+      <div class="pagination-wrapper">
+  <button id="prevBtn" onclick="prevPage()" class="btn btn-secondary btn-sm">Prev</button>
+
+<div id="paginationNumbers" class="pagination-scroll"></div>
+
+<button id="nextBtn" onclick="nextPage()" class="btn btn-secondary btn-sm">Next</button>
+</div>
+    </div>
+        <div id="settledPage">
+  <h3>Settled Deposits</h3>
+
+  <div class="settled-toolbar">
+  <div class="left-tools">
+    <input type="text" id="settledSearch" placeholder="🔍 Search ref / agent">
+  </div>
+
+  <div class="right-tools">
+    <select id="settledStatus">
+      <option value="">All Status</option>
+      <option value="APPROVED">Approved</option>
+      <option value="REJECTED">Rejected</option>
+    </select>
+
+    <select id="filterSettledBy">
+      <option value="">All Settled By</option>
+    </select>
+    
+    <select id="filterBrandSettled">
+      <option value="">All Brand</option>
+    </select>
+    
+    <select id="sortBySettled">
+      <option value="">Sort</option>
+      <option value="settledAt_desc">Settled At ↓</option>
+      <option value="settledAt_asc">Settled At ↑</option>
+      <option value="settledBy_asc">Settled By A-Z</option>
+      <option value="settledBy_desc">Settled By Z-A</option>
+      <option value="status_asc">Status A-Z</option>
+      <option value="status_desc">Status Z-A</option>
+    </select>
+
+    <input type="date" id="settledFrom">
+    <input type="date" id="settledTo">
+
+    <button onclick="exportSettled()" class="btn btn-success btn-sm">
+  ⬇ Export Settled
+</button>
+
+  </div>
+</div>
+
+  <table class="table table-bordered">
+    <thead class="table-dark">
+  <tr>
+    <th>Brand</th>
+    <th onclick="sortHeader('agentName')" style="cursor:pointer">Agent</th>
+    <th>Deposit ID</th>
+    <th onclick="sortHeader('transactionReference')" style="cursor:pointer">Ref</th>
+    <th>Customer</th>
+    <th onclick="sortHeader('amount')" style="cursor:pointer">Amount</th>
+    <th>Date</th>
+    <th>Agent No</th>
+    <th>Image</th>
+    <th onclick="sortHeader('status')" style="cursor:pointer">Status</th>
+    <th>Agent Answer</th>
+    <th onclick="sortHeader('reason')" style="cursor:pointer">Reason</th>
+    <th onclick="sortHeader('confirmedBy')" style="cursor:pointer">Confirmed By</th>
+    <th>Confirmed At</th>
+    <th onclick="sortHeader('settledBy')" style="cursor:pointer">Settled By</th>
+    <th onclick="sortHeader('settledAt')" style="cursor:pointer">Settled At</th>
+    <th>Action</th>
+  </tr>
+</thead>
+    <tbody id="settledTable"></tbody>
+  </table>
+
+  <div class="d-flex justify-content-between mt-2">
+    <button onclick="prevSettled()" class="btn btn-secondary btn-sm">Prev</button>
+    <span id="settledPageInfo">Page 1</span>
+    <button onclick="nextSettled()" class="btn btn-secondary btn-sm">Next</button>
+  </div>
+</div>
+
+      <div id="editFullModal" class="modal">
+  <div class="modal-content">
+    <h2>✏ Edit Deposit</h2>
+
+    <input id="editAgent" placeholder="Agent">
+    <input id="editDepositId" placeholder="Deposit ID">
+    <input id="editRef" placeholder="Reference">
+    <input id="editCustomer" placeholder="Customer">
+    <input id="editAmount" type="number" placeholder="Amount">
+    <input id="editDate" type="date">
+    <input id="editAgentNo" placeholder="Agent No">
+    <input id="editImage" placeholder="Image URL">
+
+    <div class="modal-actions">
+      <button onclick="submitFullEdit()" class="btn-primary">Update</button>
+      <button onclick="closeEditFullModal()" class="btn-secondary">Cancel</button>
+    </div>
+  </div>
+</div>
+
+      <div id="videoPage" style="display:none;">
+
+  <h3>Video Case</h3>
+
+  <!-- 🔍 FILTERS (same style as pending) -->
+  <div class="row mb-3 align-items-center g-2">
+
+    <div class="col-auto">
+      <input type="text" id="videoSearch" class="form-control search-input" placeholder="🔍 Search Reference">
+    </div>
+
+    <div class="col-auto">
+      <select id="videoBrandFilter" class="form-control filter-input">
+        <option value="">All Brands</option>
+      </select>
+    </div>
+
+    <div class="col-auto">
+      <select id="videoAgentFilter" class="form-control filter-input">
+        <option value="">All Agents</option>
+      </select>
+    </div>
+
+    <div class="col-auto">
+      <select id="videoStatusFilter" class="form-control filter-input">
+        <option value="">All Status</option>
+        <option value="RECEIVED">Received</option>
+        <option value="NOT RECEIVED">Not Received</option>
+      </select>
+    </div>
+
+    <div class="col-auto">
+      <select id="videoSentFilter" class="form-control filter-input">
+        <option value="">All Sent</option>
+        <option value="1">Sent</option>
+        <option value="0">Pending</option>
+      </select>
+    </div>
+
+  </div>
+
+  <!-- 🔥 TOOLBAR -->
+  <div class="toolbar-actions">
+
+    <!-- LEFT -->
+    <div class="left-actions">
+      <button onclick="openVideoSyncModal()" class="btn btn-outline-primary btn-sm">🔄 Sync Video</button>
+      <button onclick="openVideoModal()" class="btn btn-primary btn-sm">➕ Add Video Case</button>
+      <button onclick="loadVideoCases()" class="btn btn-secondary btn-sm">🔄 Refresh</button>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="right-actions">
+      <button id="videoBulkSendBtn" class="btn btn-primary btn-sm">📤 Send Selected</button>
+      <button onclick="assignVideoAndSend()" class="btn btn-warning btn-sm">👥 Assign + Send</button>
+      <button onclick="exportVideoCSV()" class="btn btn-success">⬇ Export CSV</button>
+    </div>
+
+  </div>
+
+  <!-- 📊 TABLE -->
+  <table class="table table-bordered table-striped">
+    <thead class="table-dark">
+      <tr>
+        <th><input type="checkbox" id="videoSelectAll"></th>
+        <th>Brand</th>
+        <th>Agent</th>
+        <th>Deposit ID</th>
+        <th>Ref</th>
+        <th>Customer</th>
+        <th>Amount</th>
+        <th>Date</th>
+        <th>Agent No</th>
+        <th>Video</th>
+        <th>Agent Answer</th>
+        <th>Reason</th>
+        <th>Voicemail</th>
+        <th>Confirmed By</th>
+        <th>Confirmed At</th>
+        <th>Status</th>
+        <th>Sent</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+
+    <tbody id="videoTable">
+      <!-- ✅ MUST MATCH COLUMN ORDER -->
+      <!-- Example row (for reference only) -->
+      <!--
+      <tr>
+        <td><input type="checkbox" class="video-checkbox"></td>
+        <td>M1</td>
+        <td>ESS-PS1-XXXX</td>
+        <td>DEP123</td>
+        <td>REF123</td>
+        <td>123456789</td>
+        <td>1000</td>
+        <td>2026-04-27</td>
+        <td>123456</td>
+        <td><button class="btn btn-sm btn-primary">View</button></td>
+        <td>PENDING</td>
+        <td>-</td>
+        <td>-</td>
+        <td>-</td>
+        <td>PENDING</td>
+        <td>PENDING</td>
+        <td>❌</td>
+        <td>...</td>
+      </tr>
+      -->
+    </tbody>
+  </table>
+
+  <!-- 📄 PAGINATION -->
+  <div id="videoPageInfo" style="margin-bottom:5px; font-weight:500;"></div>
+
+  <div class="pagination-wrapper">
+    <button onclick="prevVideo()" class="btn btn-secondary btn-sm">Prev</button>
+
+    <div id="videoPaginationNumbers" class="pagination-scroll"></div>
+
+    <button onclick="nextVideo()" class="btn btn-secondary btn-sm">Next</button>
+  </div>
+
+</div>
+        <div id="videoSettledPage" style="display:none;">
+  <h3>Settled Video Cases</h3>
+
+  <div class="row mb-3 align-items-end g-2">
+
+    <div class="col-auto">
+      <input type="date" id="videoConfirmedFrom" class="form-control filter-input" title="Confirmed From">
+    </div>
+
+    <div class="col-auto">
+      <input type="date" id="videoConfirmedTo" class="form-control filter-input" title="Confirmed To">
+    </div>
+
+    <div class="col-auto">
+      <input type="date" id="videoSettledFrom" class="form-control filter-input" title="Settled From">
+    </div>
+
+    <div class="col-auto">
+      <input type="date" id="videoSettledTo" class="form-control filter-input" title="Settled To">
+    </div>
+
+    <!-- 🔥 EXPORT BUTTON (RIGHT SIDE, SAME ROW) -->
+    <div class="col-auto ms-auto">
+      <button onclick="exportVideoSettled()" class="btn btn-success btn-sm">
+        ⬇ Export CSV
+      </button>
+    </div>
+
+  </div>
+
+  <table class="table table-bordered">
+    <thead class="table-dark">
+      <tr>
+        <th>Agent</th>
+        <th>Ref</th>
+        <th>Amount</th>
+        <th>Status</th>
+        <th>Reason</th>
+        <th>Voicemail</th>
+        <th>Confirmed By</th>
+        <th>Confirmed At</th>
+        <th>Settled By</th>
+        <th>Settled At</th>
+      </tr>
+    </thead>
+    <tbody id="videoSettledTable"></tbody>
+  </table>
+
+  <div id="videoSettledPageInfo" style="margin-bottom:5px;"></div>
+
+  <div class="pagination-wrapper">
+    <button onclick="prevVideoSettled()" class="btn btn-secondary btn-sm">Prev</button>
+    <button onclick="nextVideoSettled()" class="btn btn-secondary btn-sm">Next</button>
+  </div>
+</div>
+
+        <div id="smsPage">
+
+  <h3>SMS Transactions</h3>
+
+<div class="d-flex justify-content-between align-items-center mb-2">
+
+  <!-- LEFT: ACTION BUTTONS -->
+  <div class="d-flex gap-2">
+    <button id="smsRefreshBtn" onclick="refreshSMS()" class="btn btn-primary btn-sm">🔄 Refresh</button>
+    <button onclick="resetSMS()" class="btn btn-danger btn-sm">🧹 Reset SMS</button>
+
+    <input type="file" id="smsUploadFile" hidden>
+    <button onclick="document.getElementById('smsUploadFile').click()" class="btn btn-success btn-sm">📩 Upload SMS</button>
+  </div>
+
+  <!-- RIGHT: SEARCH -->
+  <input
+    type="text"
+    id="smsSearch"
+    class="form-control form-control-sm"
+    placeholder="🔍 Search..."
+    style="width: 280px;"
+  >
+
+</div>
+
+  <table class="table table-bordered table-striped">
+    <thead class="table-dark">
+      <tr>
+        <th>Shop</th>
+        <th>Wallet Type</th>
+        <th>Direction</th>
+        <th>Amount</th>
+        <th>Phone Number</th>
+        <th>Transaction ID</th>
+        <th>Payment Request ID</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody id="smsTable"></tbody>
+  </table>
+          <div class="d-flex justify-content-between mt-2">
+  <button onclick="prevSMS()" class="btn btn-secondary btn-sm">Prev</button>
+  <span id="smsPageInfo"></span>
+  <button onclick="nextSMS()" class="btn btn-secondary btn-sm">Next</button>
+</div>
+
+</div>
+
+        <!-- CHAT -->
+      <div id="chatPage">
+      <h3>Chat ID</h3>
+
+<div class="d-flex justify-content-between align-items-start flex-wrap mb-3">
+
+  <!-- LEFT -->
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    <input id="agentName" class="form-control form-control-sm" placeholder="Agent" style="width: 120px;">
+    <input id="groupName" class="form-control form-control-sm" placeholder="Group" style="width: 150px;">
+    <input id="chatId" class="form-control form-control-sm" placeholder="Chat ID" style="width: 160px;">
+
+    <button onclick="saveChat()" class="btn btn-success btn-sm">Save</button>
+    <button id="pauseChatBtn" onclick="toggleChatPause()" class="btn btn-warning btn-sm">⏸ Pause</button>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="d-flex flex-column align-items-end mt-2 mt-md-0" style="min-width:220px;">
+    
+    <input type="file" id="chatUploadFile" class="form-control form-control-sm mb-1">
+
+    <div class="d-flex gap-1">
+      <button onclick="cleanDuplicateChatIds()" class="btn btn-danger btn-sm">🧹 Clean Duplicates</button>
+      <button onclick="uploadChatBulk()" class="btn btn-success btn-sm">Upload</button>
+      <button onclick="downloadTemplate()" class="btn btn-secondary btn-sm">Template</button>
+      <button onclick="exportChatIds()" class="btn btn-primary btn-sm">⬇ Export</button>
+    </div>
+
+    <small class="text-muted mt-1">CSV: Agent, Group, Chat ID</small>
+  </div>
+
+</div>
+
+
+<input id="chatSearch"
+       class="form-control form-control-sm mb-2"
+       placeholder="Search..."
+       onkeyup="filterChat()"
+       style="max-width: 200px;">
+
+<hr>
+
+<table class="table table-bordered table-sm">
+  <thead>
+    <tr>
+      <th>Agent</th>
+      <th>Group</th>
+      <th>Chat ID</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody id="chatTable"></tbody>
+</table>
+
+<div class="d-flex justify-content-between align-items-center mt-2">
+  <button id="prevChatBtn" onclick="prevChatPage()" class="btn btn-secondary btn-sm">Prev</button>
+  <span id="chatPageInfo">Page 1</span>
+  <button id="nextChatBtn" onclick="nextChatPage()" class="btn btn-secondary btn-sm">Next</button>
+</div>
+
+      
+    </div>
+        <!-- ✅ WALLET (MOVE HERE) -->
+      <div id="walletPage">
+  <h3>Wallet List</h3>
+
+  <div class="mb-3">
+    <input type="file" id="walletFile" class="form-control">
+    <button onclick="uploadWallet()" class="btn btn-success mt-2">Upload CSV</button>
+    <button onclick="resetWallets()" class="btn btn-danger btn-sm">🧹 Reset Wallet Data</button>
+  </div>
+
+  <!-- ✅ MOVE TABLE HERE -->
+  <table class="table table-bordered table-striped">
+    <thead class="table-dark">
+      <tr>
+        <th>Wallet ID</th>
+        <th>Type</th>
+        <th>Owner</th>
+        <th>Account Type</th>
+        <th>Network</th>
+        <th>Balance</th>
+        <th>Status</th>
+        <th>Agent Group</th>
+        <th>Deposit Daily Limit</th>
+        <th>Withdrawal Daily Limit</th>
+        <th>Today Deposits</th>
+        <th>Today Withdrawals</th>
+        <th>Deposit Priority</th>
+        <th>Withdrawal Priority</th>
+        <th>Remarks</th>
+        <th>Created At</th>
+      </tr>
+    </thead>
+    <tbody id="walletTable"></tbody>
+  </table>
+
+  <div class="d-flex justify-content-between align-items-center mt-3">
+    <button onclick="prevWalletPage()" class="btn btn-secondary btn-sm">Prev</button>
+    <span id="walletPageInfo">Page 1</span>
+    <button onclick="nextWalletPage()" class="btn btn-secondary btn-sm">Next</button>
+  </div>
+
+</div>
+
+        <div id="balancePage" style="display:none;">
+  <h3>Balance Monitoring</h3>
+
+  <!-- 🔥 TAB SWITCH -->
+  <div class="d-flex gap-2 mb-3">
+    <button id="btnMonitor" class="btn btn-primary btn-sm"
+      onclick="showBalanceTab('monitor')">
+      📊 Monitoring
+    </button>
+
+    <button id="btnOverview" class="btn btn-outline-primary btn-sm"
+      onclick="showBalanceTab('overview')">
+      ⚡ Overview
+    </button>
+  </div>
+
+  <!-- ================= MONITOR TAB ================= -->
+  <div id="balanceMonitorTab">
+
+    <!-- Filters -->
+    <div class="filters" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+
+      <input type="text" id="searchOwner" placeholder="Search owner">
+
+      <select id="filterGroup">
+        <option value="">All Groups</option>
+      </select>
+
+      <select id="filterType">
+        <option value="">All Type</option>
+        <option value="Nagad">Nagad</option>
+        <option value="bKash">bKash</option>
+      </select>
+
+      <select id="filterAccountType">
+        <option value="">All Account</option>
+        <option value="agent">Agent</option>
+        <option value="personal">Personal</option>
+      </select>
+
+      <select id="filterStatus">
+        <option value="">All Status</option>
+        <option value="Active">Active</option>
+        <option value="Inactive">Inactive</option>
+      </select>
+
+      <input type="text" id="filterRemarks" placeholder="Remarks">
+
+      <button onclick="loadWallets()" class="btn btn-primary btn-sm">Search</button>
+    </div>
+
+    <!-- EXISTING TABLE STAYS HERE -->
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Agent Group</th>
+          <th>Owner</th>
+          <th>Today DP</th>
+          <th>Today WD</th>
+          <th>Balance</th>
+          <th>Status</th>
+          <th>Type</th>
+          <th>Account Type</th>
+          <th>Wallet ID</th>
+          <th>Remarks</th>
+        </tr>
+      </thead>
+      <tbody id="balanceTable"></tbody>
+    </table>
+
+  </div>
+
+  <!-- ================= OVERVIEW TAB ================= -->
+  <div id="balanceOverviewTab" style="display:none;">
+
+    <!-- 🔥 SUMMARY -->
+    <div class="dashboard-grid mb-3">
+
+      <div class="card-box">
+        <div class="card-title">🟢 Fully Active</div>
+        <div class="card-value" id="ovActive">0</div>
+      </div>
+
+      <div class="card-box">
+        <div class="card-title">🟡 Deposit Only</div>
+        <div class="card-value" id="ovDepositOnly">0</div>
+      </div>
+
+      <div class="card-box">
+        <div class="card-title">🔵 Withdrawal Only</div>
+        <div class="card-value" id="ovWithdrawOnly">0</div>
+      </div>
+
+      <div class="card-box">
+        <div class="card-title">🔴 Inactive</div>
+        <div class="card-value" id="ovInactive">0</div>
+      </div>
+
+    </div>
+
+    <!-- 🔍 FILTERS (OVERVIEW ONLY) -->
+    <div class="d-flex gap-2 mb-2 flex-wrap">
+
+      <select id="ovAccountType" class="form-control">
+        <option value="">All Account</option>
+        <option value="agent">Agent</option>
+        <option value="personal">Personal</option>
+      </select>
+
+      <select id="ovNetwork" class="form-control">
+        <option value="">All Network</option>
+        <option value="Nagad">Nagad</option>
+        <option value="bKash">bKash</option>
+      </select>
+
+      <select id="ovType" class="form-control">
+        <option value="">All Type</option>
+      </select>
+
+      <button onclick="renderOverview()" class="btn btn-primary btn-sm">
+        Apply
+      </button>
+
+    </div>
+
+    <!-- 🔥 TABLE -->
+    <table class="table table-bordered table-striped">
+      <thead class="table-dark">
+        <tr>
+          <th>Owner</th>
+          <th>Network</th>
+          <th>Balance</th>
+          <th>Today DP</th>
+          <th>DP Limit</th>
+          <th>Remaining</th>
+          <th>Recommendation</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="overviewTable"></tbody>
+    </table>
+
+    <div class="d-flex justify-content-between align-items-center mt-2">
+  <button onclick="prevOverviewPage()" class="btn btn-secondary btn-sm">Prev</button>
+  <span id="overviewPageInfo">Page 1</span>
+  <button onclick="nextOverviewPage()" class="btn btn-secondary btn-sm">Next</button>
+</div>
+
+  </div>
+
+</div>
+
+        <div id="groupsPage">
+  <h3>Detected Telegram Groups</h3>
+
+  <table class="table table-bordered table-striped">
+    <thead class="table-dark">
+      <tr>
+        <th>Group Name</th>
+        <th>Chat ID</th>
+        <th>Type</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody id="groupsTable"></tbody>
+  </table>
+</div>
+        <div id="settingsPage">
+  <h3>Settings</h3>
+
+  <!-- Developer Mode -->
+  <div class="mb-3">
+    <label>Developer Mode</label><br>
+    <button onclick="toggleDev(true)" class="btn btn-success btn-sm">ON</button>
+    <button onclick="toggleDev(false)" class="btn btn-danger btn-sm">OFF</button>
+  </div>
+
+  <div id="devOptions" style="display:none;">
+    <h5>⚙️ Bot Configuration</h5>
+    <h5 class="mt-3">📊 Google Sheets Configuration</h5>
+
+    <div class="mb-2">
+      <label>Bot Token</label>
+      <input id="botToken" class="form-control">
+    </div>
+
+    <div class="mb-2">
+      <label>Google API Key / Credentials</label>
+      <input id="googleApi" class="form-control">
+    </div>
+
+    <div class="mb-2">
+      <label>GSheet Link</label>
+      <input id="gsheetLink" class="form-control">
+    </div>
+
+    <div class="mb-2">
+      <label>Worksheet Names</label>
+      <input id="sheetNames" class="form-control">
+    </div>
+
+    <h5 class="mt-3">🎥 Video Case Sheets</h5>
+
+<div class="mb-2">
+  <label>Video GSheet Link</label>
+  <input id="videoGsheetLink" class="form-control">
+</div>
+
+<div class="mb-2">
+  <label>Video Worksheet Names</label>
+  <input id="videoSheetNames" class="form-control">
+</div>
+
+    <button onclick="saveSettings()" class="btn btn-primary mt-2">Save</button>
+  </div>
+
+
+
+  <button onclick="resetTransactions()" class="btn btn-danger">⚠ Reset Pending Deposits</button>
+  <button onclick="resetVideoCases()" class="btn btn-danger btn-sm">⚠ Reset Video Cases</button>
+  <button id="reconcileBtn" class="btn btn-danger btn-sm">🔄 Reconcile Data</button>
+
+  <!-- 🔥 MOVE LOGS HERE (INSIDE settingsPage) -->
+  <div class="mt-4">
+    <h5>📜 System Logs</h5>
+
+    <div class="d-flex gap-2 mb-2">
+      <button onclick="loadLogs()" class="btn btn-sm btn-primary">🔄 Refresh</button>
+      <button onclick="clearLogs()" class="btn btn-sm btn-danger">🗑 Clear</button>
+      <button onclick="toggleLogsFullscreen()" class="btn btn-sm btn-dark">🖥 Fullscreen</button>
+      <button onclick="openLogConfig()" class="btn btn-sm btn-warning">🔐 Log Config</button>
+      <button onclick="sendLogsToTelegram()" class="btn btn-sm btn-warning">📤 Send Logs</button>
+    </div>
+
+    <button id="exitFullscreenBtn"
+      onclick="toggleLogsFullscreen()"
+      style="
+        position: fixed;
+        top: 70px;
+        right: 10px;
+        z-index: 10000;
+        display: none;
+      "
+      class="btn btn-danger btn-sm">
+      ❌ Exit
+    </button>
+
+    <div id="logBox" style="
+      height: 300px;
+      overflow-y: auto;
+      background: #111;
+      color: #0f0;
+      font-family: monospace;
+      padding: 10px;
+      border-radius: 8px;
+    "></div>
+  </div>
+
+</div>
+
+        <div id="usersPage">
+  <h3>User Management</h3>
+
+  <button onclick="openCreateUserModal()" class="btn btn-success btn-sm mb-2">
+    ➕ Create User
+  </button>
+
+  <table class="table table-bordered">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Username</th>
+        <th>Role</th>
+        <th>Online</th>
+        <th>Last Active</th>
+        <th>Status</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody id="usersTable"></tbody>
+  </table>
+</div>
+
+      </div>
+
+      <!-- FOOTER -->
+      <div id="footerBar">
+        © 2026 <b class="brand">Mcw EasyWallet</b> • Powered by Rey
+      </div>
+
+    </div>
+
+  </div>
+
+
+<script>
+async function checkUser() {
+  const res = await fetch("/api/me", {
+    credentials: "include"
+  });
+  const user = await res.json();
+
+  if (!user || !user.role) {
+    window.location.href = "/login.html";
+    return;
+  }
+
+  currentUser = user;
+
+  // ✅ APPLY ROLE UI
+  applyRoleUI(currentUser);
+
+  // ✅ USER INFO
+  const userInfo = document.getElementById("userInfo");
+  if (userInfo) {
+    userInfo.innerText = `${user.username} (${user.role})`;
+  }
+
+  // reset search
+  const searchInput = document.getElementById("search");
+  if (searchInput) searchInput.value = "";
+
+  // 🔒 hide create button for non admin/dev
+  const allowedRoles = ["developer", "admin"];
+  const createBtn = document.getElementById("createUserBtn");
+
+  if (createBtn && !allowedRoles.includes(user.role)) {
+    createBtn.style.display = "none";
+  }
+
+  // 🔒 hide settings for non developer
+  if (user.role !== "developer") {
+    const settingsBtn = document.querySelector("[onclick*='settings']");
+    if (settingsBtn) settingsBtn.style.display = "none";
+  }
+
+  // 🔒 hide admin actions for normal user
+  if (user.role === "user") {
+    const adminActions = document.getElementById("adminActions");
+    if (adminActions) adminActions.style.display = "none";
+  }
+
+  return user;
+}
+
+async function logout() {
+  await fetch("/api/logout", { method: "POST" });
+  window.location.href = "/login.html";
+}
+//////////////////////Reset Transactions (Dev Option)//////////////////////
+async function resetTransactions() {
+  if (!confirm("Are you sure? This will delete ALL pending deposits.")) return;
+
+  try {
+    const res = await fetch("/api/reset-transactions", {
+      method: "POST",
+      credentials: "include"
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      showToast("🧹 Transactions reset");
+      allData = [];
+      await load();
+    } else {
+      showToast("❌ Reset failed", false);
+    }
+
+  } catch (err) {
+    showToast("❌ Reset failed", false);
+  }
+}
+
+let isResetting = false;
+
+async function resetVideoCases() {
+  if (isResetting) return;
+
+  const confirmReset = confirm("⚠ Are you sure you want to delete ALL video cases?");
+  if (!confirmReset) return;
+
+  isResetting = true;
+  showToast("🔄 Resetting video cases...");
+
+  try {
+    const res = await fetch("/api/reset-video-cases", {
+      method: "POST",
+      credentials: "include"
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      showToast("🧹 Video cases reset successfully");
+      await loadVideoCases();
+    } else {
+      showToast("❌ Reset failed", false);
+    }
+
+  } catch (err) {
+    console.error(err);
+    showToast("❌ Error resetting video cases", false);
+  }
+
+  isResetting = false;
+}
+
+// 🔐 Role check (hide button if not developer)
+async function checkRole() {
+  try {
+    const res = await fetch("/api/me");
+    const user = await res.json();
+
+    const btn = document.getElementById("reconcileBtn");
+
+    if (btn && user.role !== "developer") {
+      btn.style.display = "none";
+    }
+
+  } catch (err) {
+    console.error("Role check failed");
+  }
+}
+
+checkRole();
+
+
+// 🔄 Reconcile button
+const reconcileBtn = document.getElementById("reconcileBtn");
+
+if (reconcileBtn) {
+  reconcileBtn.onclick = async () => {
+    if (!confirm("Run reconciliation? This will fix mismatched data.")) return;
+
+    reconcileBtn.disabled = true;
+    reconcileBtn.innerText = "⏳ Processing...";
+
+    try {
+      const res = await fetch("/api/reconcile", {
+        method: "POST",
+        credentials: "include"
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        showToast(`✅ Fixed: ${data.fixed}, Inserted: ${data.inserted}`);
+        await load();
+
+        // 🔥 scroll after action
+        window.scrollTo({ top: 0, behavior: "smooth" });
+
+      } else {
+        showToast("❌ Failed");
+      }
+
+    } catch (err) {
+      showToast("❌ Error");
+    }
+
+    reconcileBtn.disabled = false;
+    reconcileBtn.innerText = "🔄 Reconcile Data";
+  };
+}
+</script>
+
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+let allData = [];
+let isLoading = false;
+let currentPage = 1;
+const rowsPerPage = 20;
+let filteredData = [];
+let walletCurrentPage = 1;
+const walletRowsPerPage = 20;
+let originalChatData = [];
+let chatData = [];
+let chatCurrentPage = 1;
+const chatRowsPerPage = 20;
+let currentUser = null;
+let selectedIds = new Set();
+let balanceData = [];
+let balancePage = 1;
+const balancePerPage = 20;
+let currentSort = "";
+let currentOrder = "asc";
+let totalPages = 1
+let walletData = [];
+let overviewPage = 1;
+const overviewPerPage = 15;
+let activeRowId = null;
+let activeCell = {rowId: null,colIndex: null};
+let currentRef = null;
+let smsPage = 1;
+let smsTotalPages = 1;
+let walletNeedsReset = true;
+
+/////////////////Socket//////////////////////////
+const socket = io();
+
+socket.on("update", (data) => {
+  console.log("🔄 REALTIME UPDATE:", data);
+
+  // 🔥 PENDING TABLE
+  if (data.type !== "video") {
+    const row = allData.find(t => t.id == data.id);
+
+    if (row) {
+      row.agentStatus = data.status;
+      row.confirmedBy = data.username;
+      row.reason = data.reason;
+      row.confirmedAt = data.confirmedAt;
+      row.sent = data.sent || 1;
+    }
+
+    renderTable();
+  }
+
+  // 🔥 VIDEO TABLE
+  if (data.type === "video") {
+  const row = videoData.find(v => v.id == data.id);
+
+  if (row) {
+    if (data.status !== undefined) row.agentStatus = data.status;
+    if (data.username !== undefined) row.confirmedBy = data.username;
+    if (data.reason !== undefined) row.reason = data.reason;
+    if (data.confirmedAt !== undefined) row.confirmedAt = data.confirmedAt;
+    if (data.sent !== undefined) row.sent = data.sent;
+
+    // 🔥 FIXED
+    if (data.transcript !== undefined) row.transcript = data.transcript;
+    if (data.translation !== undefined) row.translation = data.translation;
+    if (data.voicemailLink !== undefined) row.voicemailLink = data.voicemailLink;
+  }
+
+  renderVideoCases();
+}
+});
+
+// 🔥 SHOW USERS WORKING ON SAME REF
+socket.on("ref-users", ({ ref, users }) => {
+
+  // 🔥 CLEAR ALL FIRST
+  document.querySelectorAll("#tbody tr").forEach(tr => {
+    tr.classList.remove("table-warning");
+  });
+
+  // 🔥 APPLY ONLY IF CONFLICT
+  if (users.length > 1) {
+    showToast(`⚠️ ${users.map(u => u.username).join(", ")} working on ${ref}`);
+
+    document.querySelectorAll("#tbody tr").forEach(tr => {
+      const refCell = tr.children[4];
+
+      if (refCell && refCell.innerText === ref) {
+        tr.classList.add("table-warning");
+      }
+    });
+  }
+
+});
+
+window.addEventListener("beforeunload", () => {
+  if (currentRef) {
+    socket.emit("leave-ref", {
+      ref: currentRef,
+      user: currentUser
+    });
+  }
+});
+
+socket.on("log", (log) => {
+  const box = document.getElementById("logBox");
+
+  const div = document.createElement("div");
+  div.innerText = `[${new Date().toLocaleTimeString()}] (${log.level}) ${log.message}`;
+
+  box.prepend(div);
+
+  // 🔥 limit DOM (VERY IMPORTANT)
+  if (box.children.length > 200) {
+    box.removeChild(box.lastChild);
+  }
+});
+
+
+socket.on("ref-claimed", ({ ref, user }) => {
+
+  if (user.id === currentUser.id) return;
+
+  // 🔥 toast (quick info)
+  showToast(`⚠️ ${user.username} working on ${ref}`);
+
+  // 🔥 popup (decision)
+  showClaimPopup(ref, user);
+
+});
+
+socket.on("ref-confirmed", ({ ref, user, decision }) => {
+
+  if (decision === "accept") {
+    showToast(`👍 ${user.username} accepted ${ref}`);
+  }
+
+  if (decision === "takeover") {
+    showToast(`⚡ ${user.username} took over ${ref}`);
+  }
+
+  // 🔥 UPDATE ROW VISUAL
+  document.querySelectorAll("#tbody tr").forEach(tr => {
+    const refCell = tr.children[4];
+
+    if (refCell && refCell.innerText === ref) {
+      tr.classList.add("claimed-row");
+      tr.setAttribute("title", `${user.username} handling`);
+    }
+  });
+
+});
+
+socket.on("sync-status", (data) => {
+  const banner = document.getElementById("syncStatus");
+
+  if (data.syncing) {
+    banner.style.display = "block";
+    banner.innerText = "🔄 Sync in progress...";
+  } else {
+    banner.style.display = "none";
+  }
+});
+
+// 🔥 PUT HERE
+socket.on("rematch-status", async (data) => {
+  const btn = document.getElementById("rematchBtn");
+
+  if (data.loading) {
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Re-matching...";
+    }
+  }
+
+  if (data.done) {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = "🔄 Re-match";
+    }
+
+    await reloadPending();
+
+    showToast(`Re-match done (${data.matched})`, "success");
+  }
+});
+//////////////////////////////////////////////////////
+function toggleMenu(id) {
+  const menu = document.getElementById(id);
+
+  if (menu.style.display === "flex") {
+    menu.style.opacity = "0";
+    setTimeout(() => {
+      menu.style.display = "none";
+    }, 200);
+  } else {
+    menu.style.display = "flex";
+    setTimeout(() => {
+      menu.style.opacity = "1";
+    }, 10);
+  }
+}
+
+// SWITCH PAGE
+function showPage(event, page) {
+  // remove ALL active
+  document.querySelectorAll(".menu-item").forEach(btn =>
+    btn.classList.remove("active")
+  );
+
+  let target = event.target;
+
+  // 🔥 if submenu clicked → find parent menu-item
+  if (!target.classList.contains("menu-item")) {
+    target = target.closest(".menu-section").querySelector(".menu-item");
+  }
+
+  // set active ONLY on correct menu
+  target.classList.add("active");
+
+  // page switching
+  document.getElementById("dashboardPage").style.display = page === "dashboard" ? "block" : "none";
+  document.getElementById("pendingPage").style.display = page === "pending" ? "block" : "none";
+  document.getElementById("chatPage").style.display = page === "chat" ? "block" : "none";
+  document.getElementById("walletPage").style.display = page === "wallet" ? "block" : "none";
+  document.getElementById("balancePage").style.display = page === "balance" ? "block" : "none";
+  document.getElementById("groupsPage").style.display = page === "groups" ? "block" : "none";
+  document.getElementById("settledPage").style.display = page === "settled" ? "block" : "none";
+  document.getElementById("settingsPage").style.display = page === "settings" ? "block" : "none";
+  document.getElementById("usersPage").style.display = page === "users" ? "block" : "none";
+  document.getElementById("videoPage").style.display = page === "video" ? "block" : "none";
+  document.getElementById("videoSettledPage").style.display = page === "videoSettled" ? "block" : "none";
+  document.getElementById("smsPage").style.display = page === "sms" ? "block" : "none";
+
+  // loaders
+  if (page === "dashboard") loadDashboard();
+  if (page === "chat") loadChat();
+  if (page === "wallet") loadWallet();
+  if (page === "balance") loadWallets();
+  if (page === "groups") loadGroups();
+  if (page === "settled") {initSettledListeners();loadSettled();}
+  if (page === "settings") {loadSettings();loadLogs();}
+  if (page === "users") loadUsers();
+  if (page === "pending") load();
+  if (page === "video") loadVideoCases();
+  if (page === "videoSettled") loadVideoSettled();
+  if (page === "sms") loadSMS();
+}
+
+async function init() {
+  await Promise.all([
+    loadEssStatus(),
+    loadAgentPrefixes(),
+    load()
+  ]);
+}
+async function loadSettings() {
+  const res = await fetch("/api/settings", {
+    credentials: "include"
+  });
+  const data = await res.json();
+
+  if (!data) return;
+
+  document.getElementById("botToken").value = data.botToken || "";
+  document.getElementById("googleApi").value = data.googleApi || "";
+  document.getElementById("gsheetLink").value = data.gsheetLink || "";
+  document.getElementById("sheetNames").value = data.sheetNames || "";
+  document.getElementById("videoGsheetLink").value = data.videoGsheetLink || "";
+  document.getElementById("videoSheetNames").value = data.videoSheetNames || "";
+}
+//////////////////////////balance monitoring//////////////////////////
+async function loadWallets() {
+  const search = document.getElementById("searchOwner").value;
+  const agentGroup = document.getElementById("filterGroup").value;
+  const type = document.getElementById("filterType").value;
+  const accountType = document.getElementById("filterAccountType").value;
+  const status = document.getElementById("filterStatus").value;
+  const remarks = document.getElementById("filterRemarks").value;
+
+  const params = new URLSearchParams({
+  search,
+  agentGroup,
+  type,
+  accountType,
+  status,
+  remarks,
+  sortBy: currentSort,
+  order: currentOrder
+});
+
+const res = await fetch(`/api/wallets/monitor?${params}`);
+
+
+  const data = await res.json();
+console.log("BALANCE API:", data);
+
+  balanceData = data.data || [];
+  balancePage = 1;
+
+  renderBalanceTable();
+}
+
+function renderBalanceTable() {
+  const tbody = document.getElementById("balanceTable");
+  tbody.innerHTML = "";
+
+  const start = (balancePage - 1) * balancePerPage;
+  const end = start + balancePerPage;
+
+  const pageData = balanceData.slice(start, end);
+
+  pageData.forEach(w => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${w.agentGroup}</td>
+        <td>${w.ownerName}</td>
+        <td>${w.todayDeposits}</td>
+        <td>${w.todayWithdrawals}</td>
+        <td>${w.balance}</td>
+        <td>${w.status}</td>
+        <td>${w.walletType}</td>
+        <td>${w.accountType}</td>
+        <td>${w.walletId}</td>
+        <td>${w.remarks}</td>
+      </tr>
+    `;
+  });
+
+  const totalPages = Math.ceil(balanceData.length / balancePerPage) || 1;
+
+  document.getElementById("balancePageInfo").innerText =
+    `Page ${balancePage} of ${totalPages}`;
+}
+
+function sortBalance(field) {
+  if (currentSort === field) {
+    currentOrder = currentOrder === "asc" ? "desc" : "asc";
+  } else {
+    currentSort = field;
+    currentOrder = "asc";
+  }
+
+  loadWallets();
+}
+
+function nextBalancePage() {
+  if (balancePage * balancePerPage < balanceData.length) {
+    balancePage++;
+    renderBalanceTable();
+  }
+}
+
+function prevBalancePage() {
+  if (balancePage > 1) {
+    balancePage--;
+    renderBalanceTable();
+  }
+}
+
+function showBalanceTab(tab) {
+
+  document.getElementById("balanceMonitorTab").style.display =
+    tab === "monitor" ? "block" : "none";
+
+  document.getElementById("balanceOverviewTab").style.display =
+    tab === "overview" ? "block" : "none";
+
+  // button style switch
+  document.getElementById("btnMonitor").className =
+    tab === "monitor" ? "btn btn-primary btn-sm" : "btn btn-outline-primary btn-sm";
+
+  document.getElementById("btnOverview").className =
+    tab === "overview" ? "btn btn-primary btn-sm" : "btn btn-outline-primary btn-sm";
+
+  if (tab === "overview") {
+    renderOverview();
+  }
+}
+
+function getState(row) {
+
+  const balance = Number(row.balance || 0);
+  const dp = Number(row.todayDeposits || 0);
+  const limit = Number(row.depositDailyLimit || 0);
+
+  // 🔴 No money
+  if (balance <= 0) return "INACTIVE";
+
+  // 🔵 Limit reached
+  if (dp >= limit) return "WITHDRAW_ONLY";
+
+  // 🔥 NEW RULE: TOO MUCH BALANCE
+  if (limit > 0 && balance > limit) return "OVER_BALANCE";
+
+  // 🟡 Low balance
+  if (balance < 1000) return "DEPOSIT_ONLY";
+
+  return "FULL";
+}
+
+const priorityOrder = {
+  INACTIVE: 1,
+  OVER_BALANCE: 2, 
+  DEPOSIT_ONLY: 3,
+  WITHDRAW_ONLY: 4,
+  FULL: 5
+};
+
+function renderOverview() {
+
+  const tbody = document.getElementById("overviewTable");
+
+  const accountType = document.getElementById("ovAccountType").value;
+  const network = document.getElementById("ovNetwork").value;
+
+  let stats = {
+    FULL: 0,
+    DEPOSIT_ONLY: 0,
+    WITHDRAW_ONLY: 0,
+    INACTIVE: 0
+  };
+
+  // 🔥 FILTER FIRST
+  let filtered = balanceData.filter(row => {
+    if (accountType && row.accountType !== accountType) return false;
+    if (network && row.network !== network) return false;
+    return true;
+  });
+
+  // 🔥 SORT (optional but recommended)
+  const priorityOrder = {
+    INACTIVE: 1,
+    DEPOSIT_ONLY: 2,
+    WITHDRAW_ONLY: 3,
+    FULL: 4
+  };
+
+  filtered.sort((a, b) => {
+    return priorityOrder[getState(a)] - priorityOrder[getState(b)];
+  });
+
+  // 🔥 COUNT STATS (FULL DATA, not paginated)
+  filtered.forEach(row => {
+    const state = getState(row);
+    stats[state]++;
+  });
+
+  // 🔥 PAGINATION
+  const start = (overviewPage - 1) * overviewPerPage;
+  const end = start + overviewPerPage;
+
+  const pageData = filtered.slice(start, end);
+
+  // 🔥 RENDER TABLE
+  let html = "";
+
+  pageData.forEach(row => {
+
+  const balance = Number(row.balance || 0);
+  const limit = Number(row.depositDailyLimit || 0);
+
+  const state = getState(row);
+  const remaining = row.depositDailyLimit - row.todayDeposits;
+
+  let badge = "";
+  let action = "";
+  let rowClass = "";
+
+  // ✅ CLEAN ROW COLOR LOGIC
+  if (balance <= 0) rowClass = "table-danger";
+  else if (limit > 0 && balance > limit) rowClass = "table-dark";
+  else if (balance < 1000) rowClass = "table-warning";
+
+  // ✅ STATES
+  if (state === "FULL") {
+    badge = `<span class="badge bg-success">FULLY OPEN</span>`;
+    action = `—`;
+  }
+
+  if (state === "DEPOSIT_ONLY") {
+    badge = `<span class="badge bg-warning text-dark">DEPOSIT ONLY</span>`;
+    action = `<button class="btn btn-sm btn-success"
+      onclick="toggleWallet(${row.id}, 'OPEN_DP')">
+      OPEN DP
+    </button>`;
+  }
+
+  if (state === "WITHDRAW_ONLY") {
+    badge = `<span class="badge bg-info">WITHDRAW ONLY</span>`;
+    action = `<button class="btn btn-sm btn-primary"
+      onclick="toggleWallet(${row.id}, 'OPEN_WD')">
+      OPEN WD
+    </button>`;
+  }
+
+  if (state === "INACTIVE") {
+    badge = `<span class="badge bg-danger">INACTIVE</span>`;
+    action = `—`;
+  }
+
+  if (state === "OVER_BALANCE") {
+
+    const excess = balance - limit;
+
+    badge = `
+      <span class="badge bg-dark">OVER BALANCE</span>
+      <div style="font-size:11px;color:#ccc;">
+        Reduce ${excess.toLocaleString()}
+      </div>
+    `;
+
+    action = `<button class="btn btn-sm btn-warning"
+      onclick="toggleWallet(${row.id}, 'OPEN_WD')">
+      REDUCE (WD)
+    </button>`;
+  }
+
+  html += `
+    <tr class="${rowClass}">
+      <td>${row.ownerName}</td>
+      <td>${row.network}</td>
+      <td>${row.balance}</td>
+      <td>${row.todayDeposits}</td>
+      <td>${row.depositDailyLimit}</td>
+      <td>${remaining}</td>
+      <td>${badge}</td>
+      <td>${action}</td>
+    </tr>
+  `;
+  });
+
+  tbody.innerHTML = html;
+
+  // 🔥 UPDATE CARDS
+  document.getElementById("ovActive").innerText = stats.FULL;
+  document.getElementById("ovDepositOnly").innerText = stats.DEPOSIT_ONLY;
+  document.getElementById("ovWithdrawOnly").innerText = stats.WITHDRAW_ONLY;
+  document.getElementById("ovInactive").innerText = stats.INACTIVE;
+
+  // 🔥 PAGE INFO
+  const totalPages = Math.ceil(filtered.length / overviewPerPage) || 1;
+
+  document.getElementById("overviewPageInfo").innerText =
+    `Page ${overviewPage} of ${totalPages}`;
+}
+
+async function toggleWallet(id, action) {
+
+  await fetch("/api/wallet/toggle", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, action })
+  });
+
+  loadWallets();      // refresh
+  renderOverview();   // refresh overview
+}
+
+function nextOverviewPage() {
+  const filtered = getFilteredOverviewData();
+  const totalPages = Math.ceil(filtered.length / overviewPerPage);
+
+  if (overviewPage < totalPages) {
+    overviewPage++;
+    renderOverview();
+  }
+}
+
+function prevOverviewPage() {
+  if (overviewPage > 1) {
+    overviewPage--;
+    renderOverview();
+  }
+}
+
+function getFilteredOverviewData() {
+  const accountType = document.getElementById("ovAccountType").value;
+  const network = document.getElementById("ovNetwork").value;
+
+  return balanceData.filter(row => {
+    if (accountType && row.accountType !== accountType) return false;
+    if (network && row.network !== network) return false;
+    return true;
+  });
+}
+
+
+
+///////////////////////////////////////////////////////////////
+async function loadGroups() {
+  const res = await fetch("/api/groups", {
+    credentials: "include"
+  });
+  const data = await res.json();
+
+  const tbody = document.getElementById("groupsTable");
+  tbody.innerHTML = "";
+
+  data.forEach(g => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${g.groupName}</td>
+        <td>${g.chatId}</td>
+        <td>${g.type}</td>
+        <td>
+  <button onclick="navigator.clipboard.writeText('${g.chatId}')" class="btn btn-sm btn-primary">
+    Copy
+  </button>
+  <button onclick="useChat('${g.chatId}')" class="btn btn-sm btn-success">
+    Use
+  </button>
+</td>
+      </tr>
+    `;
+  });
+}
+
+// LOAD TABLE
+async function load() {
+  if (isLoading) return;
+  isLoading = true;
+
+  try {
+    const params = new URLSearchParams();
+
+    params.append("page", currentPage);
+    params.append("search", document.getElementById("search")?.value || "");
+    params.append("brand", document.getElementById("brandFilter")?.value || "");
+    params.append("essStatus", document.getElementById("essStatusFilter")?.value || "");
+    params.append("agentPrefix", document.getElementById("agentPrefixFilter")?.value || "");
+    params.append("status", document.getElementById("statusFilter")?.value || "");
+    params.append("sent", document.getElementById("sentFilter")?.value || "");
+    params.append("smsMatched", document.getElementById("smsFilter")?.value || "");
+
+    console.log("🔍 QUERY:", params.toString()); // 👈 debug
+
+    const res = await fetch(`/api/transactions?${params}`, {
+      credentials: "include"
+    });
+
+    const data = await res.json();
+
+    allData = data.data;
+    totalPages = data.totalPages || 1;
+
+    renderTable();
+
+  } catch (err) {
+    console.error(err);
+  }
+
+  isLoading = false;
+}
+
+["search", "brandFilter", "essStatusFilter", "agentPrefixFilter", "statusFilter", "sentFilter", "smsFilter"]
+.forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  el.addEventListener(id === "search" ? "input" : "change", () => {
+    currentPage = 1;
+    load();
+  });
+});
+
+function populateBrandFilter() {
+  const select = document.getElementById("brandFilter");
+
+  // reset
+  select.innerHTML = `<option value="">All Brands</option>`;
+
+  // get unique brands
+  const brands = [...new Set(allData.map(t => t.brand).filter(Boolean))];
+
+  brands.forEach(b => {
+    const opt = document.createElement("option");
+    opt.value = b;
+    opt.textContent = b;
+    select.appendChild(opt);
+  });
+}
+
+async function loadAgentPrefixes() {
+  const res = await fetch("/api/agent-prefix", {
+    credentials: "include"
+  });
+  const data = await res.json();
+
+  const select = document.getElementById("agentPrefixFilter");
+
+  select.innerHTML = `<option value="">All Agents</option>`;
+
+  data.forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p.prefix;
+    opt.textContent = `${p.prefix} (${p.count})`;
+    select.appendChild(opt);
+  });
+}
+
+async function loadBrands() {
+  const res = await fetch("/api/brands");
+  const brands = await res.json();
+
+  const select = document.getElementById("brandFilter");
+
+  select.innerHTML = `<option value="">All Brands</option>`;
+
+  brands.sort().forEach(b => {
+    const opt = document.createElement("option");
+    opt.value = b;
+    opt.textContent = b;
+    select.appendChild(opt);
+  });
+}
+//////////////////////// Clean Empty Rows (Dev Option) ////////////////////////
+async function bulkReject() {
+  const selected = Array.from(selectedIds);
+
+  if (selected.length === 0) {
+    showToast("⚠️ No rows selected", "warning");
+    return;
+  }
+
+  const confirmed = await showConfirmModal(
+    `Reject ${selected.length} transactions?`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    showToast("Processing rejection...", "info");
+
+    await fetch("/api/transactions/bulk-reject", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: selected }),
+      credentials: "include"
+    });
+
+    selectedIds.clear();
+    document.getElementById("selectAll").checked = false;
+
+    await load();
+
+    showToast(`✔ ${selected.length} transactions rejected`, "success");
+
+  } catch (err) {
+    showToast("Bulk reject failed", "error");
+    console.error(err);
+  }
+}
+
+const bulkSendBtn = document.getElementById("bulkSendBtn");
+
+if (bulkSendBtn) {
+  bulkSendBtn.onclick = async () => {
+
+    if (selectedIds.size === 0) {
+      showToast("⚠️ No rows selected", "warning");
+      return;
+    }
+
+    const confirmed = await showConfirmModal(
+      `Send ${selectedIds.size} transactions?`
+    );
+
+    if (!confirmed) return;
+
+    bulkSendBtn.disabled = true;
+    bulkSendBtn.innerText = "⏳ Sending...";
+
+    showToast("Sending transactions...", "info");
+
+    let success = 0;
+    let failed = 0;
+
+    for (const id of selectedIds) {
+      try {
+        const res = await fetch(`/api/send/${id}`, {
+          method: "POST",
+          credentials: "include"
+        });
+
+        const data = await res.json();
+
+        if (data.success) success++;
+        else failed++;
+
+      } catch (err) {
+        failed++;
+      }
+    }
+
+    showToast(`✔ Sent: ${success} | ❌ Failed: ${failed}`, "success");
+
+    selectedIds.clear();
+    await load();
+
+    bulkSendBtn.disabled = false;
+    bulkSendBtn.innerText = "📤 Send Selected";
+  };
+}
+
+function showConfirmModal(message) {
+  return new Promise(resolve => {
+    const modal = document.getElementById("confirmModal");
+
+    modal.style.display = "flex";
+    modal.querySelector("div").children[0].innerText = message;
+
+    window.closeConfirm = (result) => {
+      modal.style.display = "none";
+      resolve(result);
+    };
+  });
+}
+
+function openSyncModal() {
+  const modal = new bootstrap.Modal(document.getElementById("syncModal"));
+  modal.show();
+}
+
+async function runSync(mode) {
+  const modalEl = document.getElementById("syncModal");
+  const modal = bootstrap.Modal.getInstance(modalEl);
+  modal.hide();
+
+  showToast("🔄 Syncing...");
+
+  try {
+    const res = await fetch("/api/sync", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ mode })
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      showToast("✅ Sync completed");
+      
+
+      // 🔥 THIS IS MISSING
+      await load();
+
+    } else {
+      showToast("❌ " + (data.error || "Sync failed"), false);
+    }
+
+  } catch (err) {
+    showToast("❌ Error syncing", false);
+  }
+}
+
+////////////////ESS STATUS FILTER////////////////
+async function loadEssStatus() {
+  const res = await fetch("/api/ess-status", { credentials: "include" });
+  const data = await res.json();
+
+  const select = document.getElementById("essStatusFilter");
+
+  select.innerHTML = `<option value="">All ESS</option>`;
+
+  data.forEach(item => {
+    const opt = document.createElement("option");
+
+    opt.value = item.essStatus;
+    opt.textContent = `${item.essStatus} (${item.count})`;
+
+    // 🔥 disable if zero
+    if (item.count === 0) {
+      opt.disabled = true;
+    }
+
+    select.appendChild(opt);
+  });
+}
+
+// TELEGRAM
+async function sendTG(id) {
+  try {
+    showToast("Sending...", true);
+
+    const res = await fetch(`/api/send/${id}`, {
+      method: "POST",
+      credentials: "include"
+    });
+
+    const data = await res.json();
+
+    const row = allData.find(t => t.id == id);
+
+    if (data.success) {
+      showToast("✅ Sent");
+
+      if (row) {
+        row.sent = 1;
+        row.reason = null;
+      }
+
+    } else {
+      showToast(data.message || "❌ Failed", false);
+
+      if (row) {
+        row.sent = 0;
+        row.reason = data.message || "Send failed";
+      }
+    }
+
+    renderTable();
+
+  } catch (err) {
+    console.error(err);
+    showToast("❌ Error sending", false);
+  }
+}
+
+async function resendTG(id) {
+  if (!confirm("Resend this to Telegram?")) return;
+
+  try {
+    showToast("Resending...", true);
+
+    const res = await fetch("/api/resend-telegram", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include" // 🔥 keep session consistent
+      ,
+      body: JSON.stringify({ id })
+    });
+
+    const data = await res.json();
+
+    const row = allData.find(t => t.id == id);
+
+    if (data.success) {
+      showToast("🔁 Resent");
+
+      if (row) {
+        row.sent = 1;
+        row.reason = null;
+      }
+
+    } else {
+      showToast(data.message || "❌ Failed", false);
+
+      if (row) {
+        row.sent = 0;
+        row.reason = data.message || "Resend failed";
+      }
+    }
+
+    renderTable();
+
+  } catch (err) {
+    console.error(err);
+    showToast("❌ Error resending", false);
+  }
+}
+
+// UPDATE
+async function update(ref, brand, status) {
+  const reason = prompt("Enter reason:");
+  if (!currentUser) return;
+
+  await fetch("/api/update", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ 
+      ref, 
+      brand, 
+      status,
+      reason,
+      username: currentUser.username
+    })
+  });
+  allData = [];
+  load();
+}
+
+// CHAT
+async function saveChat() {
+  try {
+    const res = await fetch("/api/chatids", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        agentName: agentName.value,
+        groupName: groupName.value,
+        chatId: chatId.value
+      })
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      showToast("Saved successfully");
+      loadChat(); // refresh table
+
+      // optional: clear inputs
+      agentName.value = "";
+      groupName.value = "";
+      chatId.value = "";
+    } else {
+      showToast("❌ Failed to save");
+    }
+
+  } catch (err) {
+    console.error(err);
+    showToast("Error saving data", false);
+  }
+}
+
+async function loadChat() {
+  const res = await fetch("/api/chatids", {
+    credentials: "include"
+  });
+  originalChatData = await res.json();
+  chatData = [...originalChatData];
+  chatCurrentPage = 1;
+  renderChat();
+}
+
+async function toggleChatPause() {
+  const res = await fetch("/api/chatid/toggle", { method: "POST" });
+  const data = await res.json();
+
+  updatePauseButton(data.paused);
+}
+
+function updatePauseButton(paused) {
+  const btn = document.getElementById("pauseChatBtn");
+
+  if (paused) {
+    btn.innerText = "▶ Resume";
+    btn.classList.remove("btn-warning");
+    btn.classList.add("btn-success");
+  } else {
+    btn.innerText = "⏸ Pause";
+    btn.classList.remove("btn-success");
+    btn.classList.add("btn-warning");
+  }
+}
+
+async function loadChatPauseStatus() {
+  const res = await fetch("/api/chatid/status");
+  const data = await res.json();
+
+  updatePauseButton(data.paused);
+}
+
+async function uploadChatBulk() {
+  const file = document.getElementById("chatUploadFile").files[0];
+  if (!file) return showToast("Select file first");
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch("/api/upload-chatids", {
+    method: "POST",
+    body: formData
+  });
+
+  const data = await res.json();
+
+  if (data.success) {
+    showToast("Bulk upload success");
+    loadChat(); // refresh table
+  } else {
+    showToast("Upload failed", false);
+  }
+}
+
+function downloadTemplate() {
+  const csvContent = "Agent,Group,Chat ID\nESS-AG1,ESS-AG1-NARITA-K1,-4989874972";
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "chat_template.csv";
+
+  link.click();
+}
+
+async function cleanDuplicateChatIds() {
+  if (!confirm("Delete duplicate chat IDs?")) return;
+
+  const res = await fetch("/api/chatids/clean-duplicates", {
+    method: "POST"
+  });
+
+  const data = await res.json();
+
+  if (data.success) {
+    showToast(`✅ Deleted ${data.deleted} duplicates`);
+    loadChat();
+  } else {
+    showToast("❌ Failed");
+  }
+}
+
+async function exportChatIds() {
+  try {
+    const res = await fetch("/api/chatids");
+    const data = await res.json();
+
+    if (!data.length) {
+      showToast("No data to export");
+      return;
+    }
+
+    // 🔥 CSV header
+    let csv = "Agent,Group,Chat ID\n";
+
+    data.forEach(row => {
+      csv += `"${row.agentName}","${row.groupName}","${row.chatId}"\n`;
+    });
+
+    // 🔥 create file
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "chat_ids.csv";
+    a.click();
+
+    window.URL.revokeObjectURL(url);
+
+  } catch (err) {
+    console.error(err);
+    showToast("Export failed");
+  }
+}
+
+function exportPending(type = "all") {
+  let url = "/api/export/pending";
+
+  if (type === "smsMatched") {
+    url += "?smsMatched=1";
+  }
+
+  if (type === "notMatched") {
+    url += "?smsMatched=0";
+  }
+
+  // 🔥 safer than window.open (no popup block)
+  window.location.href = url;
+}
+
+function openExportModal() {
+  document.getElementById("exportModal").style.display = "flex";
+}
+
+function closeExportModal() {
+  document.getElementById("exportModal").style.display = "none";
+}
+
+function confirmExport() {
+  const type = document.getElementById("exportType").value;
+
+  closeExportModal();
+
+  exportPending(type);
+}
+
+function exportSettled() {
+  const from = document.getElementById("settledFrom").value;
+  const to = document.getElementById("settledTo").value;
+
+  let url = `/api/export/settled?`;
+
+  if (from && to) {
+    url += `from=${from}&to=${to}`;
+  }
+
+  window.open(url, "_blank");
+}
+
+function renderChat() {
+  const tbody = document.getElementById("chatTable");
+  tbody.innerHTML = "";
+
+  const start = (chatCurrentPage - 1) * chatRowsPerPage;
+  const end = start + chatRowsPerPage;
+  const pageData = chatData.slice(start, end);
+
+  if (pageData.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="4" class="text-center text-muted">No chat IDs found</td>
+      </tr>
+    `;
+  } else {
+    pageData.forEach(c => {
+      tbody.innerHTML += `
+        <tr>
+          <td>${c.agentName || "-"}</td>
+          <td><b>${c.groupName}</b></td>
+          <td>${c.chatId}</td>
+          <td>
+            <button onclick="useChat('${c.chatId}')" class="btn btn-sm btn-primary">Use</button>
+            <button onclick="deleteChat(${c.id})" class="btn btn-sm btn-danger">Delete</button>
+          </td>
+        </tr>
+      `;
+    });
+  }
+
+  const totalPages = Math.max(1, Math.ceil(chatData.length / chatRowsPerPage));
+
+document.getElementById("prevChatBtn").disabled = chatCurrentPage === 1;
+document.getElementById("nextChatBtn").disabled = chatCurrentPage >= totalPages;
+
+  document.getElementById("chatPageInfo").innerText =
+  `Page ${chatCurrentPage} of ${totalPages} | Total: ${chatData.length}`;
+}
+
+function prevChatPage() {
+  if (chatCurrentPage > 1) {
+    chatCurrentPage--;
+    renderChat();
+  }
+}
+
+function nextChatPage() {
+  if (chatCurrentPage * chatRowsPerPage < chatData.length) {
+    chatCurrentPage++;
+    renderChat();
+  }
+}
+
+function filterChat() {
+  const input = document.getElementById("chatSearch").value.toLowerCase();
+
+  chatData = originalChatData.filter(c =>
+    (c.agentName || "").toLowerCase().includes(input) ||
+    (c.groupName || "").toLowerCase().includes(input) ||
+    String(c.chatId || "").toLowerCase().includes(input)
+  );
+
+  chatCurrentPage = 1;
+  renderChat();
+}
+
+async function deleteChat(id) {
+  if (!confirm("Delete this chat?")) return;
+
+  const res = await fetch(`/api/chatids/${id}`, {
+    method: "DELETE"
+  });
+
+  const data = await res.json();
+
+  if (data.success) {
+    showToast("Deleted");
+    loadChat();
+  } else {
+    showToast("Failed to delete", false);
+  }
+}
+
+function useChat(id) {
+  document.getElementById("chatId").value = id;
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return "-";
+  const d = new Date(dateStr);
+  return d.toLocaleString();
+}
+
+function renderTable() {
+  const tbody = document.getElementById("tbody");
+
+  let html = "";
+
+  allData.forEach(t => {
+    const agentAnswerBadge = t.agentStatus
+      ? (t.agentStatus === "RECEIVED"
+        ? '<span class="badge bg-success">RECEIVED</span>'
+        : '<span class="badge bg-danger">NOT RECEIVED</span>')
+      : '<span class="badge bg-warning text-dark">PENDING</span>';
+
+    const confirmedByText = t.confirmedBy || "-";
+    const reasonText = t.reason || "-";
+
+    const sentBadge = t.sent === 1
+      ? '<span class="badge bg-success">SENT</span>'
+      : (t.reason
+        ? '<span class="badge bg-danger">FAILED</span>'
+        : '<span class="badge bg-warning text-dark">PENDING</span>'
+      );
+
+    const isEmpty = !t.transactionReference && !t.amount && !t.agentName;
+
+    const deleteBtn = isEmpty
+      ? `<button onclick="deleteRow(${t.id})" class="btn btn-dark btn-sm px-2 py-1">🗑</button>`
+      : "";
+
+    const editBtn = `<button onclick="editDeposit(${t.id})" class="btn btn-info btn-sm px-2 py-1">✏</button>`;
+
+    let actionButtons = "";
+
+    if (isEmpty) {
+      actionButtons = `${editBtn}${deleteBtn}`;
+    } else {
+      actionButtons = `
+        ${Number(t.sent) === 1? `
+        <button class="btn btn-secondary btn-sm" disabled>✔ Sent</button>
+        <button onclick="event.stopPropagation(); resendTG(${t.id})" class="btn btn-info btn-sm">🔁</button>
+        `
+        : `<button onclick="event.stopPropagation(); sendTG(${t.id})" class="btn btn-primary btn-sm">📤</button>`
+        }
+
+        ${t.sent === 0
+          ? `<button onclick="openAssignModal(${t.id})" class="btn btn-warning btn-sm px-2 py-1">📌</button>`
+          : ""
+        }
+
+        <button onclick="claimRef('${t.transactionReference}')" 
+          class="btn btn-warning btn-sm px-2 py-1">🧠</button>
+
+        <button onclick="update('${t.transactionReference}','${t.brand}','RECEIVED')" class="btn btn-success btn-sm px-2 py-1">✔</button>
+        <button onclick="update('${t.transactionReference}','${t.brand}','NOT RECEIVED')" class="btn btn-danger btn-sm px-2 py-1">✖</button>
+
+        ${editBtn}
+      `;
+    }
+
+    html += `
+  <tr 
+    data-id="${t.id}"
+    onclick="focusRef('${t.transactionReference}', this)"
+    class="
+      ${selectedIds.has(String(t.id)) ? 'table-warning' : ''}
+      ${activeRowId == t.id ? 'active-row' : ''}
+    "
+  >
+        <td>
+          <input type="checkbox" class="rowCheck" value="${t.id}" 
+            ${selectedIds.has(String(t.id)) ? "checked" : ""}>
+        <td>
+          <span class="badge bg-dark">${t.brand || '-'}</span></td>
+        <td>${t.agentName}</td>
+        <td>${t.depositId}</td>
+        <td class="copyable">${t.transactionReference}</td>
+        <td>${t.customerNumber}</td>
+        <td>${t.amount}</td>
+        <td>${t.depositDate}</td>
+        <td>${t.agentNumber}</td>
+        <td>
+  ${
+    t.imageLink
+      ? `<button onclick="openImageModal(this.dataset.link)" data-link="${t.imageLink}" class="btn btn-sm btn-primary">View</button>`
+      : `<span style="color:#ccc;">📭</span>`
+  }
+</td>
+        <td>${t.essStatus}</td>
+
+        <td>${agentAnswerBadge}</td>
+        <td>${reasonText}</td> 
+        <td>${confirmedByText}</td>
+        <td>${formatDate(t.confirmedAt)}</td>
+        <td>${sentBadge}</td>
+        <td>${t.smsMatched ?'<span class="badge bg-success">MATCHED</span>' :'<span class="badge bg-secondary">NONE</span>'}</td>
+
+        <td>
+          <div class="action-buttons">
+            ${actionButtons}
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+
+  tbody.innerHTML = html;
+
+  // Page info
+  const pageInfo = document.getElementById("pageInfo");
+  if (pageInfo) {
+    pageInfo.innerText = `Page ${currentPage} of ${totalPages}`;
+  }
+
+  // ✅ Tooltip fix (no memory leak)
+  document.querySelectorAll('[title]').forEach(el => {
+    const existing = bootstrap.Tooltip.getInstance(el);
+    if (existing) existing.dispose();
+    new bootstrap.Tooltip(el);
+  });
+
+  // ✅ Render pagination ONCE
+  renderPagination();
+
+console.log("✅ renderTable finished");
+
+// 🔥 RESTORE ROW HIGHLIGHT
+setTimeout(() => {
+  if (activeRowId !== null) {
+    const row = document.querySelector(`#tbody tr[data-id="${activeRowId}"]`);
+    if (row) {
+      row.classList.add("active-row");
+    }
+  }
+}, 0);
+}
+
+function onRowClick(ref) {
+  socket.emit("focus-ref", {
+    ref,
+    user: currentUser
+  });
+}
+
+document.getElementById("search").addEventListener("input", (e) => {
+  const ref = e.target.value.trim();
+
+  if (ref.length > 5) {
+    socket.emit("focus-ref", {
+      ref,
+      user: currentUser
+    });
+  }
+});
+
+function claimRef(ref) {
+  socket.emit("claim-ref", {
+    ref,
+    user: currentUser
+  });
+}
+
+function focusRef(ref, rowEl) {
+
+  const rowId = rowEl.dataset.id;
+
+  // leave previous
+  if (currentRef && currentRef !== ref) {
+    socket.emit("leave-ref", {
+      ref: currentRef,
+      user: currentUser
+    });
+  }
+
+  currentRef = ref;
+  activeRowId = rowId;
+
+  document.querySelectorAll("#tbody tr").forEach(r => {
+    r.classList.remove("active-row");
+  });
+
+  rowEl.classList.add("active-row");
+
+  socket.emit("focus-ref", {
+    ref,
+    user: currentUser
+  });
+}
+
+function showClaimPopup(ref, user) {
+  const modal = document.createElement("div");
+  modal.className = "modal";
+  modal.style.display = "flex";
+
+  modal.innerHTML = `
+    <div class="modal-content">
+      <h3>⚠️ Conflict Detected</h3>
+      <p><b>${user.username}</b> is working on <b>${ref}</b></p>
+
+      <div class="modal-actions">
+        <button onclick="confirmRef('${ref}', 'accept')" class="btn btn-success">
+          👍 OK, you handle
+        </button>
+
+        <button onclick="confirmRef('${ref}', 'takeover')" class="btn btn-danger">
+          ⚡ I take over
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
+function confirmRef(ref, decision) {
+
+  socket.emit("confirm-ref", {
+    ref,
+    user: currentUser,
+    decision
+  });
+
+  // 🔥 remove ALL conflict modals (safe + simple)
+  document.querySelectorAll(".modal").forEach(m => m.remove());
+}
+
+function openImageModal(link) {
+  const modal = document.getElementById("imageModal");
+  const img = document.getElementById("modalImage");
+  const linkBox = document.getElementById("modalLink");
+
+  img.src = link;
+
+  // optional: show link below image
+  linkBox.innerHTML = `
+    <a href="${link}" target="_blank">🔗 Open Original</a>
+  `;
+
+  modal.style.display = "flex";
+}
+
+function closeImageModal() {
+  document.getElementById("imageModal").style.display = "none";
+}
+
+window.addEventListener("click", function(e) {
+  const modal = document.getElementById("imageModal");
+  if (e.target === modal) {
+    modal.style.display = "none";
+  }
+});
+
+document.addEventListener("click", function (e) {
+  const cell = e.target.closest("#tbody td, #settledTable td");
+  if (!cell) return;
+
+  const row = cell.closest("tr");
+  if (!row) return;
+
+  // ❌ ignore checkbox column ONLY for pending table
+  if (row.closest("#tbody") && cell.cellIndex === 0) return;
+
+  // ❌ ignore buttons, links, inputs
+  if (
+    e.target.closest("button") ||
+    e.target.closest("a") ||
+    e.target.closest("input")
+  ) return;
+
+  const text = cell.innerText.trim();
+  if (!text) return;
+
+  navigator.clipboard.writeText(text);
+
+  // 🔥 remove highlight from BOTH tables
+  document.querySelectorAll("#tbody td, #settledTable td").forEach(td => {
+    td.classList.remove("copied");
+  });
+
+  // 🔥 highlight clicked cell
+  cell.classList.add("copied");
+
+  showToast("📋 Copied: " + text);
+});
+
+let settledSortAsc = false;
+
+function sortSettledAt() {
+  const rows = Array.from(document.querySelectorAll("#settledTable tr"));
+
+  rows.sort((a, b) => {
+    const aText = a.children[15].innerText.trim();
+    const bText = b.children[15].innerText.trim();
+
+    const parse = (str) => {
+      const d = new Date(str);
+      return isNaN(d) ? 0 : d.getTime();
+    };
+
+    return settledSortAsc
+      ? parse(aText) - parse(bText)
+      : parse(bText) - parse(aText);
+  });
+
+  settledSortAsc = !settledSortAsc;
+
+  const tbody = document.getElementById("settledTable");
+  tbody.innerHTML = "";
+
+  rows.forEach(r => tbody.appendChild(r));
+}
+
+function copyText(text, el) {
+  navigator.clipboard.writeText(text);
+
+  // highlight effect
+  el.classList.add("copied");
+
+  setTimeout(() => {
+    el.classList.remove("copied");
+  }, 800);
+
+  showToast("📋 Copied: " + text);
+}
+
+let isPaging = false;
+
+function renderPagination() {
+  const container = document.getElementById("paginationNumbers");
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  const maxVisible = 50;
+
+  let start = currentPage - Math.floor(maxVisible / 2);
+  let end = currentPage + Math.floor(maxVisible / 2);
+
+  if (start < 1) {
+    start = 1;
+    end = Math.min(maxVisible, totalPages);
+  }
+
+  if (end > totalPages) {
+    end = totalPages;
+    start = Math.max(1, totalPages - maxVisible + 1);
+  }
+
+  for (let i = start; i <= end; i++) {
+    const btn = document.createElement("button");
+
+    btn.innerText = i;
+    btn.className = "page-btn";
+
+    if (i === currentPage) {
+      btn.classList.add("active");
+    }
+
+    btn.onclick = async () => {
+      if (isPaging) return;
+
+      isPaging = true;
+      currentPage = i;
+      await load();
+      isPaging = false;
+    };
+
+    container.appendChild(btn);
+  }
+
+  // ✅ Prev / Next state
+  const prevBtn = document.getElementById("prevBtn");
+  const nextBtn = document.getElementById("nextBtn");
+
+  if (prevBtn) prevBtn.disabled = currentPage === 1;
+  if (nextBtn) nextBtn.disabled = currentPage === totalPages;
+}
+
+async function nextPage() {
+  if (currentPage < totalPages) {
+    currentPage++;
+    await load();
+  }
+}
+
+async function prevPage() {
+  if (currentPage > 1) {
+    currentPage--;
+    await load();
+  }
+}
+
+document.getElementById("selectAll").addEventListener("change", function () {
+  const checked = this.checked;
+
+  document.querySelectorAll(".rowCheck").forEach(cb => {
+    cb.checked = checked;
+
+    if (checked) {
+      selectedIds.add(cb.value);
+    } else {
+      selectedIds.delete(cb.value);
+    }
+
+    cb.closest("tr").classList.toggle("table-warning", checked);
+  });
+});
+
+document.addEventListener("change", function (e) {
+  if (e.target.classList.contains("rowCheck")) {
+    const id = e.target.value;
+
+    if (e.target.checked) {
+      selectedIds.add(id);
+    } else {
+      selectedIds.delete(id);
+    }
+
+    e.target.closest("tr").classList.toggle("table-warning", e.target.checked);
+  }
+});
+
+// RENDER TABLE
+async function resetWallets() {
+
+  if (!confirm("⚠️ Delete all wallet data?")) return;
+
+  try {
+    const res = await fetch("/api/wallet/reset", {
+      method: "DELETE"
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      showToast(`🧹 ${data.deleted} wallets deleted`, "success");
+
+      walletNeedsReset = false;
+      loadWallet();
+    }
+
+  } catch (err) {
+    console.error(err);
+    showToast("Failed to reset wallets", "error");
+  }
+}
+
+function renderWallet() {
+  const tbody = document.getElementById("walletTable");
+  tbody.innerHTML = "";
+
+  const start = (walletCurrentPage - 1) * walletRowsPerPage;
+  const end = start + walletRowsPerPage;
+
+  const pageData = walletData.slice(start, end);
+
+  pageData.forEach(w => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${w.walletId}</td>
+        <td>${w.walletType}</td>
+        <td>${w.ownerName}</td>
+        <td>${w.accountType}</td>
+        <td>${w.network}</td>
+        <td>${w.balance}</td>
+        <td>${w.status}</td>
+        <td>${w.agentGroup}</td>
+        <td>${w.depositDailyLimit}</td>
+        <td>${w.withdrawalDailyLimit}</td>
+        <td>${w.todayDeposits}</td>
+        <td>${w.todayWithdrawals}</td>
+        <td>${w.depositPriority}</td>
+        <td>${w.withdrawalPriority}</td>
+        <td>${w.remarks}</td>
+        <td>${w.createdAt}</td>
+      </tr>
+    `;
+  });
+
+  document.getElementById("walletPageInfo").innerText =
+    `Page ${walletCurrentPage} of ${Math.ceil(walletData.length / walletRowsPerPage)}`;
+}
+
+
+function nextWalletPage() {
+  if (walletCurrentPage * walletRowsPerPage < walletData.length) {
+    walletCurrentPage++;
+    renderWallet();
+  }
+}
+
+function prevWalletPage() {
+  if (walletCurrentPage > 1) {
+    walletCurrentPage--;
+    renderWallet();
+  }
+}
+
+async function loadWallet() {
+  const res = await fetch("/api/wallets");
+  walletData = await res.json();
+
+  walletCurrentPage = 1; 
+  renderWallet();
+}
+
+// UPLOAD TO BACKEND
+async function uploadWallet() {
+  const file = document.getElementById("walletFile").files[0];
+
+  if (!file) {
+    showToast("Upload CSV first", "warning");
+    return;
+  }
+
+  // 🚨 BLOCK if not reset
+  if (walletNeedsReset) {
+    showToast("⚠️ Please reset wallet data first!", "warning");
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  await fetch("/api/upload-wallet", {
+    method: "POST",
+    body: formData
+  });
+
+  showToast("Wallet uploaded!", "success");
+
+  // 🔥 after upload → require reset again
+  walletNeedsReset = true;
+
+  loadWallet();
+}
+
+
+let syncing = false;
+
+async function manualSync() {
+  if (syncing) return;
+
+  syncing = true;
+  document.getElementById("syncBtn").disabled = true;
+
+  try {
+    const res = await fetch('/api/sync', { method: 'POST' });
+    const data = await res.json();
+
+    if (data.success) {
+      showToast("Sync completed");
+      await init(); // ✅ refresh everything
+    } else {
+      showToast("Sync failed");
+    }
+
+  } catch (err) {
+    console.error(err);
+    showToast("Server error during sync");
+  }
+
+  syncing = false;
+  document.getElementById("syncBtn").disabled = false;
+}
+
+function showToast(message, type = "success") {
+  const container = document.getElementById("toastContainer");
+
+  // create toast element
+  const toast = document.createElement("div");
+
+  const icons = {
+    success: "✔️",
+    error: "❌",
+    warning: "⚠️",
+    info: "ℹ️"
+  };
+
+  toast.className = `premium-toast ${type}`;
+  toast.innerHTML = `
+    <div class="toast-content">
+      <span class="toast-icon">${icons[type] || "✔️"}</span>
+      <span class="toast-message">${message}</span>
+    </div>
+  `;
+
+  container.appendChild(toast);
+
+  // trigger animation
+  setTimeout(() => toast.classList.add("show"), 10);
+
+  // auto remove
+  setTimeout(() => {
+    toast.classList.remove("show");
+    setTimeout(() => toast.remove(), 300);
+  }, 2500);
+}
+
+////////////////////////////////////Settled function////////////////////////////////////
+let settledData = [];
+let settledPage = 1;
+const settledPerPage = 20;
+let settledSort = "id";
+let settledOrder = "desc";
+let editingId = null;
+let settledListenersInitialized = false;
+let currentSortField = "";
+let currentSortOrder = "desc";
+
+function initSettledListeners() {
+  if (settledListenersInitialized) return; // ✅ prevent duplicate listeners
+
+  [
+    "settledStatus",
+    "settledFrom",
+    "settledTo",
+    "filterSettledBy",
+    "filterBrandSettled",
+    "sortBySettled"
+  ].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    el.addEventListener("change", loadSettled);
+  });
+
+  const searchEl = document.getElementById("settledSearch");
+
+  if (searchEl) {
+    searchEl.addEventListener("input", debounce(loadSettled, 400));
+  }
+
+  settledListenersInitialized = true; // 🔥 mark as done
+}
+
+function debounce(fn, delay) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), delay);
+  };
+}
+
+function sortHeader(field) {
+  if (currentSortField === field) {
+    currentSortOrder = currentSortOrder === "asc" ? "desc" : "asc";
+  } else {
+    currentSortField = field;
+    currentSortOrder = "asc";
+  }
+
+  document.getElementById("sortBySettled").value =
+    `${field}_${currentSortOrder}`;
+    
+
+  loadSettled();
+}
+
+async function loadSettled() {
+  const params = new URLSearchParams({
+    search: document.getElementById("settledSearch").value,
+    status: document.getElementById("settledStatus").value,
+    startDate: document.getElementById("settledFrom").value,
+    endDate: document.getElementById("settledTo").value,
+    settledBy: document.getElementById("filterSettledBy")?.value || "",
+    brand: document.getElementById("filterBrandSettled")?.value || "",
+    sortBy: document.getElementById("sortBySettled")?.value || ""
+  });
+
+  const res = await fetch(`/api/settled?${params}`, {
+    credentials: "include" // ✅ correct placement
+  });
+
+  settledData = await res.json();
+
+  populateSettledFilters(settledData); // 🔥 auto-fill dropdowns
+  renderSettled();
+}
+
+function populateSettledFilters(data) {
+  const settledBySelect = document.getElementById("filterSettledBy");
+  const brandSelect = document.getElementById("filterBrandSettled");
+
+  // 🧠 SAVE current selection
+  const currentSettledBy = settledBySelect.value;
+  const currentBrand = brandSelect.value;
+
+  const settledBySet = new Set();
+  const brandSet = new Set();
+
+  data.forEach(t => {
+    if (t.settledBy) settledBySet.add(t.settledBy);
+    if (t.brand) brandSet.add(t.brand);
+  });
+
+  settledBySelect.innerHTML = `<option value="">All Settled By</option>`;
+  brandSelect.innerHTML = `<option value="">All Brand</option>`;
+
+  settledBySet.forEach(v => {
+    settledBySelect.innerHTML += `<option value="${v}">${v}</option>`;
+  });
+
+  brandSet.forEach(v => {
+    brandSelect.innerHTML += `<option value="${v}">${v}</option>`;
+  });
+
+  // 🔥 RESTORE selection
+  settledBySelect.value = currentSettledBy;
+  brandSelect.value = currentBrand;
+}
+
+function renderSettled() {
+  const tbody = document.getElementById("settledTable");
+  tbody.innerHTML = "";
+
+  const headers = document.querySelectorAll("#settledPage th");
+  
+
+headers.forEach(th => {
+  th.innerHTML = th.innerText.replace(" ↑", "").replace(" ↓", "");
+  
+  
+});
+
+if (settledSort) {
+  const map = {
+  agentName: 1,
+  transactionReference: 3,
+  amount: 5,
+  reason: 11,
+  confirmedBy: 12
+};
+
+  const index = map[settledSort];
+
+  if (headers[index]) {
+    headers[index].innerHTML += settledOrder === "asc" ? " ↑" : " ↓";
+  }
+}
+
+  const search = document.getElementById("settledSearch").value.toLowerCase();
+  const statusFilter = document.getElementById("settledStatus").value;
+
+  const from = document.getElementById("settledFrom")?.value;
+  const to = document.getElementById("settledTo")?.value;
+
+  const filtered = settledData;
+  const totalPages = Math.ceil(filtered.length / settledPerPage);
+
+if (settledPage > totalPages) {
+  settledPage = 1;
+}
+
+  const start = (settledPage - 1) * settledPerPage;
+  const paginated = filtered.slice(start, start + settledPerPage);
+
+  paginated.forEach(t => {
+    const badge =
+      t.actionStatus === "APPROVED"
+        ? '<span class="badge bg-success">APPROVED</span>'
+        : '<span class="badge bg-danger">REJECTED</span>';
+
+    const agentAnswerBadge = t.agentStatus
+  ? (t.agentStatus === "RECEIVED"
+      ? '<span class="badge bg-success">RECEIVED</span>'
+      : '<span class="badge bg-danger">NOT RECEIVED</span>')
+  : '<span class="badge bg-warning text-dark">PENDING</span>';
+
+    tbody.innerHTML += `
+<tr data-id="${t.id}" class="${activeRowId == t.id ? 'active-row' : ''}">
+  <td>${t.brand || '-'}</td>
+  <td>${t.agentName}</td>
+  <td>${t.depositId}</td>
+  <td>${t.transactionReference}</td>
+  <td>${t.customerNumber}</td>
+  <td>${t.amount}</td>
+  <td>${t.depositDate}</td>
+  <td>${t.agentNumber}</td>
+  <td>
+  ${
+    t.imageLink && t.imageLink !== "null"
+      ? `<button onclick="openImageModal(this.dataset.link)" data-link="${t.imageLink}" class="btn btn-sm btn-primary">View</button>`
+      : `<span style="color:#ccc;">📭</span>`
+  }
+</td>
+  <td>${badge}</td>
+  <td>${agentAnswerBadge}</td>
+  <td>${t.reason || "-"}</td>
+  <td>${t.confirmedBy || "-"}</td>
+  <td>${t.confirmedAt ? new Date(t.confirmedAt).toLocaleString() : '-'}</td>
+  <td>${t.settledBy || "-"}</td>
+  <td>${
+  (() => {
+    if (!t.settledAt) return "-";
+    const d = new Date(t.settledAt);
+    return isNaN(d) ? "-" : d.toLocaleString();
+  })()
+}</td>
+  <td>
+    <div class="action-buttons">
+      <button onclick="revert(${t.id})" class="btn btn-warning btn-sm">↩</button>
+      <button onclick="sendTG(${t.id})" class="btn btn-primary btn-sm">📤</button>
+      ${["admin","developer"].includes(currentUser?.role)
+        ? `<button onclick="editRow(${t.id})" class="btn btn-info btn-sm">✏</button>`
+        : ""
+      }
+    </div>
+  </td>
+</tr>
+`;
+  });
+
+  document.getElementById("settledPageInfo").innerText =
+    `Page ${settledPage} of ${Math.ceil(filtered.length / settledPerPage)}`;
+
+    // 🔥 restore highlight after re-render / pagination
+setTimeout(() => {
+  if (activeRowId !== null) {
+    const row = document.querySelector(`#settledTable tr[data-id="${activeRowId}"]`);
+    if (row) {
+      row.classList.add("active-row");
+    }
+  }
+}, 0);
+}
+
+async function revert(id) {
+  await fetch("/api/revert", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    credentials: "include",
+    body: JSON.stringify({ id })
+  });
+
+  loadSettled();
+  load();
+}
+
+let editingFullId = null;
+
+function editRow(id) {
+  const t = settledData.find(x => x.id == id);
+  if (!t) return;
+
+  editingFullId = id;
+
+  document.getElementById("editAgent").value = t.agentName || "";
+  document.getElementById("editDepositId").value = t.depositId || "";
+  document.getElementById("editRef").value = t.transactionReference || "";
+  document.getElementById("editCustomer").value = t.customerNumber || "";
+  document.getElementById("editAmount").value = t.amount || "";
+  document.getElementById("editDate").value = t.depositDate || "";
+  document.getElementById("editAgentNo").value = t.agentNumber || "";
+  document.getElementById("editImage").value = t.imageLink || "";
+
+  document.getElementById("editFullModal").style.display = "flex";
+}
+
+function closeEditFullModal() {
+  document.getElementById("editFullModal").style.display = "none";
+}
+
+async function submitFullEdit() {
+  const data = {
+    id: editingFullId,
+    agent: editAgent.value,
+    depositId: editDepositId.value,
+    ref: editRef.value,
+    customer: editCustomer.value,
+    amount: editAmount.value,
+    date: editDate.value,
+    agentNo: editAgentNo.value,
+    image: editImage.value
+  };
+
+  await fetch("/api/edit-full", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(data)
+  });
+
+  closeEditFullModal();
+  loadSettled();
+  load();
+}
+
+function nextSettled() {
+  if (settledPage * settledPerPage < settledData.length) {
+    settledPage++;
+    renderSettled();
+  }
+}
+
+function prevSettled() {
+  if (settledPage > 1) {
+    settledPage--;
+    renderSettled();
+  }
+}
+
+/////////////////////////Developer///////////////////////
+async function saveSettings() {
+  const data = {
+    botToken: botToken.value,
+    googleApi: googleApi.value,
+    gsheetLink: gsheetLink.value,
+    sheetNames: sheetNames.value,
+
+    // 🔥 ADD THESE
+    videoGsheetLink: document.getElementById("videoGsheetLink").value,
+    videoSheetNames: document.getElementById("videoSheetNames").value
+  };
+
+  const res = await fetch("/api/settings", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(data),
+    credentials: "include"
+  });
+
+  const result = await res.json();
+
+  if (result.success) {
+    showToast("Settings saved");
+  } else {
+    showToast("Failed to save", false);
+  }
+}
+
+let devMode = localStorage.getItem("devMode") === "true";
+
+window.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("devOptions").style.display =
+    devMode ? "block" : "none";
+});
+
+window.addEventListener("DOMContentLoaded", () => {
+  showPage({ target: document.querySelector(".menu-item") }, "dashboard");
+});
+
+
+function toggleDev(state) {
+  devMode = state;
+  localStorage.setItem("devMode", state);
+
+  document.getElementById("devOptions").style.display =
+    devMode ? "block" : "none";
+}
+
+let lastLogTime = 0;
+let logOffset = 0;
+
+async function loadLogs() {
+  const res = await fetch(`/api/logs?offset=0`, {
+    credentials: "include"
+  });
+
+  const data = await res.json();
+  const box = document.getElementById("logBox");
+
+  box.innerHTML = "";
+
+  const fragment = document.createDocumentFragment();
+
+  data.forEach(log => {
+    const div = document.createElement("div");
+    div.innerText = `[${log.createdAt}] (${log.level}) ${log.message}`;
+    fragment.appendChild(div);
+  });
+
+  box.appendChild(fragment);
+}
+
+function toggleLogsFullscreen() {
+  const box = document.getElementById("logBox");
+  const exitBtn = document.getElementById("exitFullscreenBtn");
+
+  box.classList.toggle("fullscreen-log");
+
+  if (box.classList.contains("fullscreen-log")) {
+    exitBtn.style.display = "block";
+  } else {
+    exitBtn.style.display = "none";
+  }
+}
+
+async function saveLogSettings() {
+  const chatId = document.getElementById("logChatId").value;
+  const password = document.getElementById("logPassword").value;
+
+  const res = await fetch("/api/log-settings", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    credentials: "include",
+    body: JSON.stringify({ chatId, password })
+  });
+
+  const data = await res.json();
+  showToast(data.message || "Saved");
+}
+
+async function sendLogsToTelegram() {
+  console.log("SEND CLICKED"); // 🔥 debug
+
+  const password = document.getElementById("accessPassword")?.value;
+
+  if (!password) {
+    showToast("Enter password first", false);
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/send-logs", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      credentials: "include",
+      body: JSON.stringify({ password })
+    });
+
+    const data = await res.json();
+
+    console.log("SEND RESULT:", data);
+
+    if (data.success) {
+      showToast("Logs sent ✅");
+    } else {
+      showToast(data.message || "Failed", false);
+    }
+
+  } catch (err) {
+    console.error(err);
+    showToast("Error sending logs", false);
+  }
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    const box = document.getElementById("logBox");
+    box.classList.remove("fullscreen-log");
+  }
+});
+
+async function clearLogs() {
+  if (!confirm("Delete all logs?")) return;
+
+  await fetch("/api/logs", {
+    method: "DELETE",
+    credentials: "include"
+  });
+
+  loadLogs();
+}
+
+function openLogConfig() {
+  document.getElementById("logConfigModal").style.display = "block";
+}
+
+function closeLogModal() {
+  document.getElementById("logConfigModal").style.display = "none";
+}
+
+async function verifyAccess() {
+  const btn = document.querySelector("button[onclick='verifyAccess()']");
+  const password = document.getElementById("accessPassword").value;
+
+  if (!password) {
+    showToast("Enter password", false);
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerText = "Checking...";
+
+  try {
+    const res = await fetch("/api/log-access", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      credentials: "include",
+      body: JSON.stringify({ password })
+    });
+
+    const data = await res.json();
+
+    console.log("VERIFY RESULT:", data); // 🔥 debug
+
+    if (data.firstTime) {
+      showToast("First time setup", true);
+      document.getElementById("logConfigFields").style.display = "block";
+      return;
+    }
+
+    if (data.success) {
+      showToast("Access granted", true);
+
+      document.getElementById("logConfigFields").style.display = "block";
+
+      // 🔥 lock UI after success
+      document.getElementById("accessPassword").disabled = true;
+      btn.style.display = "none";
+    } else {
+      showToast("Wrong password", false);
+    }
+
+  } catch (err) {
+    console.error(err);
+    showToast("Network error", false);
+  }
+
+  btn.disabled = false;
+  btn.innerText = "Enter";
+}
+
+async function saveLogSettingsSecure() {
+  const chatId = document.getElementById("newChatId").value;
+  const password = document.getElementById("newPassword").value;
+
+  const res = await fetch("/api/log-settings-secure", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    credentials: "include",
+    body: JSON.stringify({ chatId, password })
+  });
+
+  const data = await res.json();
+  showToast(data.message);
+
+  if (data.success) {
+    closeLogModal();
+  }
+}
+
+//INIT//
+document.addEventListener("DOMContentLoaded", async () => {
+
+  const statusEl = document.getElementById("statusFilter");
+  if (statusEl) statusEl.value = "";
+
+  const brandEl = document.getElementById("brandFilter");
+  if (brandEl) brandEl.value = "";
+
+  const searchEl = document.getElementById("search");
+  if (searchEl) searchEl.value = "";
+
+  await checkUser();
+  await loadBrands();
+  await init();
+
+  const activeMenu =
+    document.querySelector(".menu-item.active") ||
+    document.querySelector(".menu-item");
+
+  showPage({ target: activeMenu }, "dashboard");
+
+  loadDashboard();
+
+  const devEl = document.getElementById("devOptions");
+  if (devEl) {
+    devEl.style.display = devMode ? "block" : "none";
+  }
+
+});
+
+
+
+// EVENTS
+["search", "brandFilter", "essStatusFilter", "agentPrefixFilter", "statusFilter", "sentFilter", "smsFilter"]
+.forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return; // 🔥 prevents crash
+
+  el.addEventListener(id === "search" ? "input" : "change", () => {
+    currentPage = 1;
+    load();
+  });
+});
+
+document.getElementById("search").addEventListener("keypress", function(e) {
+  if (e.key === "Enter") {
+  }
+});
+
+
+
+window.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("settledFrom")?.addEventListener("change", () => {
+    settledPage = 1;
+    renderSettled();
+  });
+
+  document.getElementById("settledTo")?.addEventListener("change", () => {
+    settledPage = 1;
+    renderSettled();
+  });
+});
+
+///////////////////////Header Time///////////////////
+function updateTime() {
+  const now = new Date();
+
+  const formatted = now.toLocaleString("en-PH", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    year: "numeric",
+    month: "short",
+    day: "2-digit"
+  });
+
+  document.getElementById("timeNow").innerText = formatted;
+}
+
+setInterval(updateTime, 1000);
+updateTime();
+
+function toggleOptions(e) {
+  const menu = document.getElementById("optionsMenu");
+  menu.classList.toggle("show");
+}
+
+document.addEventListener("click", function (e) {
+  const menu = document.getElementById("optionsMenu");
+  const button = document.querySelector(".btn-options");
+
+  if (!menu.contains(e.target) && !button.contains(e.target)) {
+    menu.classList.remove("show");
+  }
+});
+
+// close when clicking outside
+window.addEventListener("click", function(e) {
+  if (!e.target.closest("#optionsMenu") && !e.target.closest("button")) {
+    document.getElementById("optionsMenu").style.display = "none";
+  }
+});
+
+/////////////////////Manual assign/////////////////////
+let selectedId = null;
+let confirmResolve = null;
+
+function showConfirm(message) {
+  return new Promise((resolve) => {
+    confirmResolve = resolve;
+
+    document.querySelector("#confirmModal div div").innerText = message;
+    document.getElementById("confirmModal").style.display = "flex";
+  });
+}
+
+function closeConfirm(result) {
+  document.getElementById("confirmModal").style.display = "none";
+
+  if (confirmResolve) {
+    confirmResolve(result);
+    confirmResolve = null;
+  }
+}
+
+function closeConfirm(result) {
+  document.getElementById("confirmModal").style.display = "none";
+
+  if (confirmResolve) {
+    confirmResolve(result);
+    confirmResolve = null;
+  }
+}
+
+async function openAssignModal(id) {
+  selectedId = id;
+
+  const res = await fetch("/api/chatids", {
+    credentials: "include"
+  });
+  const groups = await res.json();
+
+  const select = document.getElementById("groupSelect");
+  select.innerHTML = "";
+
+  // 🔥 sort for better UX
+  groups.sort((a, b) => a.groupName.localeCompare(b.groupName));
+
+  groups.forEach(g => {
+    const opt = document.createElement("option");
+    opt.value = g.chatId;
+    opt.textContent = g.groupName;
+    opt.dataset.name = g.groupName.toLowerCase();
+    select.appendChild(opt);
+  });
+
+  document.getElementById("groupSearch").value = "";
+  document.getElementById("assignModal").style.display = "flex";
+
+  setTimeout(() => {
+    document.getElementById("groupSearch").focus();
+  }, 100);
+}
+
+function closeModal() {
+  document.getElementById("assignModal").style.display = "none";
+}
+
+async function confirmAssign() {
+  const chatId = document.getElementById("groupSelect").value;
+
+  if (!chatId) {
+    showToast("Please select a group", "warn");
+    return;
+  }
+
+  // 🔥 ADD CONFIRM HERE
+  const ok = await showConfirm("Send this transaction to Telegram?");
+
+  if (!ok) return;
+
+  const res = await fetch("/api/assign-group", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    credentials: "include",
+    body: JSON.stringify({
+      id: selectedId,
+      chatId
+    })
+  });
+
+  const data = await res.json();
+
+  if (data.success) {
+    showToast("Sent to Telegram", "success");
+    closeModal();
+
+    allData = [];
+    load();
+  } else {
+    showToast("Failed to send", "error");
+  }
+}
+
+function filterGroups() {
+  const keyword = document.getElementById("groupSearch").value.toLowerCase();
+  const select = document.getElementById("groupSelect");
+  const options = select.options;
+
+  let firstVisible = null;
+
+  for (let opt of options) {
+    const name = opt.dataset.name || ""; // ✅ safety
+    const match = name.includes(keyword);
+
+    opt.style.display = match ? "" : "none";
+
+    if (match && !firstVisible) {
+      firstVisible = opt;
+    }
+  }
+
+  // ✅ auto-select first visible
+  if (firstVisible) {
+    select.value = firstVisible.value;
+  }
+}
+
+///////////////////////// AGENT STATS /////////////////////////
+function loadAgentStatsDual() {
+  loadAgentStatsAll();
+  loadAgentStatsToday();
+}
+
+async function loadAgentStatsAll() {
+  const div = document.getElementById("agentStatsAll");
+
+  try {
+    div.innerHTML = "Loading...";
+
+    const res = await fetch("/api/dashboard/settled-stats");
+    const data = await res.json();
+
+    div.innerHTML = renderAgentList(data.agentStats);
+
+  } catch (err) {
+    console.error(err);
+    div.innerHTML = "Failed";
+  }
+}
+
+async function loadAgentStatsToday() {
+  const div = document.getElementById("agentStatsToday");
+
+  try {
+    div.innerHTML = "Loading...";
+
+    const res = await fetch("/api/agent-performance-today");
+    const data = await res.json();
+
+    div.innerHTML = renderAgentList(data);
+
+  } catch (err) {
+    console.error(err);
+    div.innerHTML = "Failed";
+  }
+}
+function renderAgentList(data) {
+  return data
+    .sort((a, b) => {
+      const totalB = (b.approved || 0) + (b.rejected || 0) + (b.pending || 0);
+      const totalA = (a.approved || 0) + (a.rejected || 0) + (a.pending || 0);
+      return totalB - totalA;
+    })
+    .map((a, index) => {
+
+      const approved = a.approved || 0;
+      const rejected = a.rejected || 0;
+      const pending = a.pending || 0;
+
+      const total = approved + rejected + pending;
+      const settled = approved + rejected;
+
+      const completion = total > 0
+        ? ((settled / total) * 100).toFixed(1)
+        : 0;
+
+      return `
+        <div class="stat-row">
+          <div>
+            <b>
+              ${index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : "#"+(index+1)}
+              ${a.agentName}
+            </b><br>
+            <small>
+              Completion: ${completion}% • Total: ${total}
+            </small>
+          </div>
+          <div>
+            <span style="color:#22c55e">✔ ${approved}</span>
+            &nbsp;
+            <span style="color:#ef4444">✖ ${rejected}</span>
+            &nbsp;
+            <span style="color:#f59e0b">⏳ ${pending}</span>
+          </div>
+        </div>
+      `;
+    }).join("");
+}
+
+///////////////////////// DASHBOARD /////////////////////////
+async function loadDashboard() {
+  try {
+    const res = await fetch("/api/dashboard");
+    const data = await res.json();
+
+    // TOP STATS
+    statPending.innerText = data.totalPending;
+    statSettled.innerText = data.totalSettled;
+
+    statApprovedRejected.innerHTML =
+      `<span style="color:#22c55e">✔ ${data.approved}</span> /
+       <span style="color:#ef4444">✖ ${data.rejected}</span>`;
+
+    statPendingToday.innerText = data.pendingToday;
+    statSettledToday.innerText = data.settledToday;
+
+    statAgentPending.innerText = data.agentPending;
+
+    statAmount.innerText = "₱" + data.totalAmount.toLocaleString();
+
+    statUsers.innerText = data.activeUsers;
+
+    // BRAND STATS
+    brandStats.innerHTML = "";
+    data.brandStats.forEach(b => {
+      brandStats.innerHTML += `<div><span>${b.brand}</span><b>${b.count}</b></div>`;
+    });
+
+    brandTodayStats.innerHTML = "";
+    data.brandTodayStats.forEach(b => {
+      brandTodayStats.innerHTML += `<div><span>${b.brand}</span><b>${b.count}</b></div>`;
+    });
+
+    // USER ONLY
+    loadSettledStats(data.totalPending, data.totalSettled);
+
+    // 🔥 AGENT LOAD (IMPORTANT)
+    loadAgentStatsDual();
+
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+///////////////////////// USER STATS /////////////////////////
+async function loadSettledStats(totalPending, totalSettled) {
+  const res = await fetch("/api/dashboard/settled-stats");
+  const data = await res.json();
+
+  const userDiv = document.getElementById("userStats");
+
+  userDiv.innerHTML = data.userStats
+    .sort((a, b) => (b.approved + b.rejected) - (a.approved + a.rejected))
+    .map(u => {
+
+      const settled = u.approved + u.rejected;
+      const totalWorkload = totalPending + totalSettled;
+
+      const accuracy = totalWorkload > 0
+        ? ((settled / totalWorkload) * 100).toFixed(1)
+        : 0;
+
+      return `
+        <div class="stat-row">
+          <div>
+            <b>${u.username}</b>
+            <small>
+              Accuracy: ${accuracy}%
+            </small>
+          </div>
+          <div>
+            <span style="color:#22c55e">✔ ${u.approved}</span>
+            &nbsp;
+            <span style="color:#ef4444">✖ ${u.rejected}</span>
+          </div>
+        </div>
+      `;
+    }).join("");
+}
+
+</script>
+
+<script>
+function openDepositModal() {
+  document.getElementById("modalTitle").innerText = editingId
+    ? "Edit Deposit"
+    : "Add Deposit";
+
+  // ONLY clear if ADD mode
+  if (!editingId) {
+    document.getElementById("agent").value = "";
+    document.getElementById("depositId").value = "";
+    document.getElementById("ref").value = "";
+    document.getElementById("customer").value = "";
+    document.getElementById("amount").value = "";
+    document.getElementById("date").value = "";
+    document.getElementById("agentNo").value = "";
+    document.getElementById("image").value = "";
+  }
+
+  document.getElementById("depositModal").style.display = "block";
+}
+
+function closeDepositModal() {
+  document.getElementById("depositModal").style.display = "none";
+}
+
+async function submitDeposit() {
+  const data = {
+    agent: document.getElementById("agent").value,
+    depositId: document.getElementById("depositId").value,
+    ref: document.getElementById("ref").value,
+    customer: document.getElementById("customer").value,
+    amount: document.getElementById("amount").value,
+    date: document.getElementById("date").value,
+    agentNo: document.getElementById("agentNo").value,
+    image: document.getElementById("image").value
+  };
+
+  // 🔥 ONLY validate when ADDING
+  if (!editingId) {
+  // ADD mode only
+  if (!data.ref?.trim() || !data.amount?.trim() || !data.agent?.trim()) {
+    showToast("Please fill required fields");
+    return;
+  }
+}
+
+  let url = "/api/manual-add";
+
+  if (editingId) {
+    url = "/api/edit-full";
+    data.id = editingId;
+  }
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(data)
+  });
+
+  const result = await res.json();
+
+  if (result.success) {
+    showToast(editingId ? "Updated" : "Added");
+
+    editingId = null;
+    closeDepositModal();
+
+    allData = [];
+    load();
+  } else {
+    showToast("Failed", false);
+  }
+}
+
+////////////////Delete Null/////////////////////
+async function deleteRow(id) {
+  console.log("CLICK DELETE ID:", id);
+
+  try {
+    const res = await fetch("/api/delete", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ id }),
+      credentials: "include"
+    });
+
+    console.log("STATUS:", res.status);
+
+    const text = await res.text(); // 🔥 raw response
+    console.log("RAW:", text);
+
+    const data = JSON.parse(text);
+
+    if (data.success) {
+      showToast("Deleted");
+
+      allData = allData.filter(t => t.id !== id);
+      filteredData = filteredData.filter(t => t.id !== id);
+
+      renderTable();
+    } else {
+      showToast("Failed", false);
+    }
+
+  } catch (err) {
+    console.error("DELETE ERROR:", err); // 🔥 VERY IMPORTANT
+    showToast("Error", false);
+  }
+}
+
+
+
+function editDeposit(id) {
+  const t = allData.find(x => x.id == id);
+  if (!t) return;
+
+  editingId = id;
+
+  document.getElementById("agent").value = t.agentName || "";
+  document.getElementById("depositId").value = t.depositId || "";
+  document.getElementById("ref").value = t.transactionReference || "";
+  document.getElementById("customer").value = t.customerNumber || "";
+  document.getElementById("amount").value = t.amount || "";
+  document.getElementById("date").value = t.depositDate || "";
+  document.getElementById("agentNo").value = t.agentNumber || "";
+  document.getElementById("image").value = t.imageLink || "";
+
+  openDepositModal(); // ✅ now safe
+}
+///////////////////////////////Video Case Page/////////////////////////////////////////////////////////
+let videoData = [];
+let videoPage = 1;
+const videoPerPage = 20;
+let videoSettledData = [];
+let videoSettledPage = 1;
+const videoSettledPerPage = 20;
+let videoBrandsLoaded = false;
+const videoSelectedIds = new Set();
+
+async function loadVideoCases() {
+
+  const params = new URLSearchParams({
+    search: document.getElementById("videoSearch")?.value || "",
+    brand: document.getElementById("videoBrandFilter")?.value || "",
+    agent: document.getElementById("videoAgentFilter")?.value || "",
+    status: document.getElementById("videoStatusFilter")?.value || "",
+    sent: document.getElementById("videoSentFilter")?.value || ""
+  });
+
+  const res = await fetch(`/api/video-case?${params.toString()}`, {
+    credentials: "include"
+  });
+
+  const data = await res.json();
+
+  videoData = data || [];
+
+  // 🔥 ADD THIS LINE
+  populateVideoBrands();
+
+  videoPage = 1;
+  renderVideoCases();
+}
+
+const videoBulkSendBtn = document.getElementById("videoBulkSendBtn");
+
+if (videoBulkSendBtn) {
+  videoBulkSendBtn.onclick = async () => {
+
+    if (videoSelectedIds.size === 0) {
+      showToast("⚠️ No rows selected", "warning");
+      return;
+    }
+
+    const confirmed = await showConfirmModal(
+      `Send ${videoSelectedIds.size} video cases?`
+    );
+
+    if (!confirmed) return;
+
+    videoBulkSendBtn.disabled = true;
+    videoBulkSendBtn.innerText = "⏳ Sending...";
+
+    showToast("Sending video cases...", "info");
+
+    let success = 0;
+    let failed = 0;
+
+    for (const id of videoSelectedIds) {
+      try {
+        const res = await fetch(`/api/video/send/${id}`, {
+          method: "POST",
+          credentials: "include"
+        });
+
+        const data = await res.json();
+
+        if (data.success) success++;
+        else failed++;
+
+      } catch (err) {
+        failed++;
+      }
+    }
+
+    showToast(`✔ Sent: ${success} | ❌ Failed: ${failed}`, "success");
+
+    videoSelectedIds.clear();
+    await loadVideoCases(); // 🔥 correct
+
+    videoBulkSendBtn.disabled = false;
+    videoBulkSendBtn.innerText = "📤 Send Selected";
+  };
+}
+
+function nextVideo() {
+  if (videoPage * videoPerPage < videoData.length) {
+    videoPage++;
+    renderVideoCases();
+  }
+}
+
+function prevVideo() {
+  if (videoPage > 1) {
+    videoPage--;
+    renderVideoCases();
+  }
+}
+
+function updateVideoPageInfo(filteredLength) {
+  const totalPages = Math.ceil(filteredLength / videoPerPage) || 1;
+
+  document.getElementById("videoPageInfo").innerText =
+    `Page ${videoPage} of ${totalPages}`;
+}
+
+function renderVideoCases() {
+  const tbody = document.getElementById("videoTable");
+
+  const start = (videoPage - 1) * videoPerPage;
+  const end = start + videoPerPage;
+
+  // ✅ BACKEND FILTER ONLY
+  const pageData = videoData.slice(start, end);
+
+  if (!pageData.length) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="18" style="text-align:center;">No Video Data</td>
+      </tr>
+    `;
+    updateVideoPageInfo(0);
+    return;
+  }
+
+  tbody.innerHTML = pageData.map(t => {
+
+    const agentAnswerBadge = t.agentStatus
+      ? (t.agentStatus === "RECEIVED"
+        ? '<span class="badge bg-success">RECEIVED</span>'
+        : '<span class="badge bg-danger">NOT RECEIVED</span>')
+      : '<span class="badge bg-warning text-dark">PENDING</span>';
+
+    return `
+      <tr>
+        <td><input type="checkbox" class="video-checkbox" value="${t.id}" ${t.sent ? "disabled" : ""}></td>
+        <td>${t.brand || ""}</td>
+        <td>${t.agentName || ""}</td>
+        <td>${t.depositId || "-"}</td>
+        <td>${t.transactionReference || ""}</td>
+        <td>${t.customerNumber || ""}</td>
+        <td>${t.amount || ""}</td>
+        <td>${t.depositDate || ""}</td>
+        <td>${t.agentNumber || ""}</td>
+
+        <td>
+          ${t.videoLink
+            ? `<a href="${t.videoLink}" target="_blank" class="btn btn-primary btn-sm">▶ View</a>`
+            : "-"
+          }
+        </td>
+
+        <td>${agentAnswerBadge}</td>
+        <td>${t.reason || "-"}</td>
+
+        <td>
+          ${t.voicemailLink
+            ? `<audio controls src="${t.voicemailLink}" style="width:150px;"></audio>`
+            : "-"
+          }
+        </td>
+
+        <td>${t.confirmedBy || "-"}</td>
+        <td>${t.confirmedAt || "-"}</td>
+
+        <td>${t.status || ""}</td>
+
+        <td>
+          ${t.sent
+            ? '<span class="badge bg-success">SENT</span>'
+            : '<span class="badge bg-warning">PENDING</span>'}
+        </td>
+
+        <td>
+          <button onclick="updateVideo(${t.id}, 'RECEIVED')" class="btn btn-success btn-sm">✔</button>
+          <button onclick="updateVideo(${t.id}, 'NOT RECEIVED')" class="btn btn-danger btn-sm">✖</button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  updateVideoPageInfo(videoData.length);
+}
+
+function populateVideoBrands() {
+  if (videoBrandsLoaded) return;
+
+  const brandEl = document.getElementById("videoBrandFilter");
+  if (!brandEl) return;
+
+  const brands = [...new Set(videoData.map(t => t.brand).filter(Boolean))];
+
+  brandEl.innerHTML =
+    `<option value="">All Brands</option>` +
+    brands.map(b => `<option value="${b.trim()}">${b.trim()}</option>`).join("");
+
+  videoBrandsLoaded = true;
+}
+
+function openVideoSyncModal() {
+  const modal = new bootstrap.Modal(
+    document.getElementById("videoSyncModal")
+  );
+  modal.show();
+}
+
+async function syncVideo() {
+  try {
+    showToast("Syncing video...", true);
+
+    const res = await fetch("/api/sync", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ mode: "video" }) // 🔥 important
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      showToast("Video sync completed", true);
+      loadVideoCases(); // refresh table
+    } else {
+      showToast("Sync failed", false);
+    }
+
+  } catch (err) {
+    console.error(err);
+    showToast("Error syncing", false);
+  }
+}
+
+function closeSyncModal() {
+  const modalEl = document.getElementById("videoSyncModal");
+  const modal = bootstrap.Modal.getInstance(modalEl);
+
+  if (modal) {
+    modal.hide();
+  }
+}
+
+async function runVideoSync() {
+  console.log("🔥 Sync started"); // debug
+
+  const agentGroup = document.getElementById("syncAgentGroup").value;
+  const status = document.getElementById("syncStatusFilter").value;
+
+  closeSyncModal();
+  showToast("🔄 Syncing Video Case...");
+
+  try {
+    const res = await fetch("/api/sync-video", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        agentGroup,
+        status
+      })
+    });
+
+    const data = await res.json();
+
+    console.log("SYNC RESULT:", data);
+
+    if (data.success) {
+      showToast(`✅ Synced ${data.inserted} rows`);
+      loadVideoCases(); // reload table
+    } else {
+      showToast("❌ Sync failed: " + (data.message || ""), false);
+    }
+
+  } catch (err) {
+    console.error("SYNC ERROR:", err);
+    showToast("❌ Error syncing", false);
+  }
+}
+
+async function cleanEmpty() {
+  await fetch("/api/clean-empty", { method: "POST" });
+  showToast("Cleaned");
+  allData = [];
+  load();
+}
+
+function getSelectedVideoIds() {
+  return Array.from(document.querySelectorAll(".video-checkbox:checked"))
+    .map(cb => cb.value);
+}
+
+// ===============================
+// ☑️ SELECT ALL CHECKBOX
+// ===============================
+function bindVideoSelectAll() {
+  const selectAll = document.getElementById("videoSelectAll");
+
+  if (!selectAll) return;
+
+  selectAll.addEventListener("change", function () {
+    document.querySelectorAll(".video-checkbox").forEach(cb => {
+      if (!cb.disabled) {
+        cb.checked = this.checked;
+
+        if (this.checked) {
+          videoSelectedIds.add(cb.value);
+        } else {
+          videoSelectedIds.delete(cb.value);
+        }
+      }
+    });
+  });
+}
+
+// ===============================
+// 📤 BULK SEND TO TELEGRAM
+// ===============================
+function bindVideoBulkSend() {
+  const btn = document.getElementById("videoBulkSendBtn");
+  if (!btn) return;
+
+  btn.addEventListener("click", async () => {
+
+    const ids = Array.from(videoSelectedIds);
+
+    if (!ids.length) {
+      showToast("⚠️ No rows selected", "warning");
+      return;
+    }
+
+    const confirmed = await showConfirmModal(
+      `Send ${ids.length} video cases?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      btn.disabled = true;
+      btn.innerText = "⏳ Sending...";
+
+      showToast("Sending video cases...", "info");
+
+      const res = await fetch("/api/video/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        credentials: "include",
+        body: JSON.stringify({ ids })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        showToast(`✔ Sent: ${data.successCount} | ❌ Failed: ${data.failCount}`, "success");
+      } else {
+        showToast(data.message || "❌ Failed to send", "error");
+      }
+
+      videoSelectedIds.clear();
+      await loadVideoCases();
+
+    } catch (err) {
+      console.error(err);
+      showToast("❌ Error sending", "error");
+    } finally {
+      btn.disabled = false;
+      btn.innerText = "📤 Send Selected";
+    }
+
+  });
+}
+
+
+// ===============================
+// 👥 ASSIGN + SEND
+// ===============================
+async function assignVideoAndSend() {
+  const ids = getSelectedVideoIds();
+
+  if (!ids.length) {
+    alert("Select rows first");
+    return;
+  }
+
+  const agent = prompt("Assign to Agent:");
+  if (!agent) return;
+
+  try {
+    const res = await fetch("/api/video/assign-send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ ids, agent })
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      alert("✅ Assigned & Sent");
+      loadVideoCases(); // 🔥 FIXED
+    } else {
+      alert("❌ Failed");
+    }
+
+  } catch (err) {
+    console.error(err);
+    alert("❌ Error");
+  }
+}
+
+// ===============================
+// 🔄 INIT (IMPORTANT)
+// ===============================
+function initVideoBulkActions() {
+  bindVideoSelectAll();
+  bindVideoBulkSend();
+}
+
+document.addEventListener("change", (e) => {
+  if (e.target.classList.contains("video-checkbox")) {
+    const id = e.target.value;
+
+    if (e.target.checked) {
+      videoSelectedIds.add(id);
+    } else {
+      videoSelectedIds.delete(id);
+    }
+
+    // optional highlight
+    const row = e.target.closest("tr");
+    row.classList.toggle("active-row", e.target.checked);
+  }
+});
+
+async function updateVideo(id, status) {
+  let reason = "";
+
+  if (status === "NOT RECEIVED") {
+    reason = prompt("Enter reason:") || "";
+  }
+
+  try {
+    const res = await fetch("/api/video/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        id,
+        status,
+        reason,
+        username: currentUser.username
+      })
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      showToast("Updated ✅");
+      loadVideoCases(); // 🔥 refresh table
+    } else {
+      showToast("Failed ❌");
+    }
+
+  } catch (err) {
+    console.error(err);
+    showToast("Error ❌");
+  }
+}
+
+async function loadVideoSettled() {
+
+  const params = new URLSearchParams({
+    confirmedFrom: document.getElementById("videoConfirmedFrom")?.value || "",
+    confirmedTo: document.getElementById("videoConfirmedTo")?.value || "",
+    settledFrom: document.getElementById("videoSettledFrom")?.value || "",
+    settledTo: document.getElementById("videoSettledTo")?.value || "",
+    agent: document.getElementById("videoAgentFilter")?.value || "",
+    status: document.getElementById("videoStatusFilter")?.value || ""
+  });
+
+  const res = await fetch(`/api/video/settled?${params.toString()}`, {
+    credentials: "include"
+  });
+
+  videoSettledData = await res.json();
+  videoSettledPage = 1;
+
+  renderVideoSettled();
+
+  let html = "";
+
+  if (!data.length) {
+    html = `<tr><td colspan="10" style="text-align:center;">No Data</td></tr>`;
+  } else {
+    data.forEach(t => {
+      html += `
+        <tr>
+          <td>${t.agentName}</td>
+          <td>${t.transactionReference}</td>
+          <td>${t.amount}</td>
+
+          <td>
+            <span class="badge bg-${t.actionStatus === 'APPROVED' ? 'success' : 'danger'}">
+              ${t.actionStatus}
+            </span>
+          </td>
+
+          <td>${t.reason || '-'}</td>
+
+          <td>
+            ${t.voicemailLink
+              ? `<audio controls src="${t.voicemailLink}" style="width:140px;"></audio>`
+              : '-'}
+          </td>
+
+          <td>${t.confirmedBy || '-'}</td>
+          <td>${t.confirmedAt || '-'}</td>
+          <td>${t.settledBy || '-'}</td>
+          <td>${t.settledAt || '-'}</td>
+        </tr>
+      `;
+    });
+  }
+
+  document.getElementById("videoSettledTable").innerHTML = html;
+}
+
+function renderVideoSettled() {
+  const tbody = document.getElementById("videoSettledTable");
+
+  const start = (videoSettledPage - 1) * videoSettledPerPage;
+  const end = start + videoSettledPerPage;
+
+  const pageData = videoSettledData.slice(start, end);
+
+  if (!pageData.length) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;">No Data</td></tr>`;
+    updateVideoSettledPageInfo(0);
+    return;
+  }
+
+  let html = "";
+
+  pageData.forEach(t => {
+    html += `
+      <tr>
+        <td>${t.agentName}</td>
+        <td>${t.transactionReference}</td>
+        <td>${t.amount}</td>
+
+        <td>
+          <span class="badge bg-${t.actionStatus === 'APPROVED' ? 'success' : 'danger'}">
+            ${t.actionStatus}
+          </span>
+        </td>
+
+        <td>${t.reason || '-'}</td>
+
+        <td>
+          ${t.voicemailLink
+            ? `<audio controls src="${t.voicemailLink}" style="width:140px;"></audio>`
+            : '-'}
+        </td>
+
+        <td>${t.confirmedBy || '-'}</td>
+        <td>${t.confirmedAt || '-'}</td>
+        <td>${t.settledBy || '-'}</td>
+        <td>${t.settledAt || '-'}</td>
+      </tr>
+    `;
+  });
+
+  tbody.innerHTML = html;
+
+  updateVideoSettledPageInfo(videoSettledData.length);
+}
+
+function nextVideoSettled() {
+  if (videoSettledPage * videoSettledPerPage < videoSettledData.length) {
+    videoSettledPage++;
+    renderVideoSettled();
+  }
+}
+
+function prevVideoSettled() {
+  if (videoSettledPage > 1) {
+    videoSettledPage--;
+    renderVideoSettled();
+  }
+}
+
+function updateVideoSettledPageInfo(total) {
+  const totalPages = Math.ceil(total / videoSettledPerPage) || 1;
+
+  document.getElementById("videoSettledPageInfo").innerText =
+    `Page ${videoSettledPage} of ${totalPages}`;
+}
+
+function exportVideoSettled() {
+  if (!videoSettledData.length) {
+    alert("No data to export");
+    return;
+  }
+
+  const rows = [
+    ["Agent","Ref","Amount","Status","Reason","Confirmed By","Confirmed At","Settled By","Settled At"]
+  ];
+
+  videoSettledData.forEach(t => {
+    rows.push([
+      t.agentName,
+      t.transactionReference,
+      t.amount,
+      t.actionStatus,
+      t.reason || "",
+      t.confirmedBy || "",
+      t.confirmedAt || "",
+      t.settledBy || "",
+      t.settledAt || ""
+    ]);
+  });
+
+  const csv = rows.map(r => r.join(",")).join("\n");
+
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "video_settled.csv";
+  a.click();
+
+  URL.revokeObjectURL(url);
+}
+
+function bindVideoFilters() {
+  const ids = [
+    "videoSearch",
+    "videoBrandFilter",
+    "videoAgentFilter",
+    "videoStatusFilter",
+    "videoSentFilter",
+    "videoConfirmedFrom",
+    "videoConfirmedTo"
+  ];
+
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    const handler = () => {
+      videoPage = 1; // 🔥 reset page
+      loadVideoCases();
+    };
+
+    el.addEventListener("input", handler);
+    el.addEventListener("change", handler);
+  });
+}
+
+// Settled page filters
+
+["videoConfirmedFrom","videoConfirmedTo","videoSettledFrom","videoSettledTo"]
+.forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  el.addEventListener("change", () => {
+    loadVideoSettled();
+  });
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  bindVideoFilters();
+  initVideoBulkActions();
+});
+
+function exportVideoCSV() {
+  const search = document.getElementById("videoSearch")?.value || "";
+  const agent = document.getElementById("videoAgentFilter")?.value || "";
+  const status = document.getElementById("videoStatusFilter")?.value || "";
+  const brand = document.getElementById("videoBrandFilter")?.value || ""; // 🔥 ADD THIS
+
+  const params = new URLSearchParams({
+    search,
+    agent,
+    status,
+    brand // 🔥 IMPORTANT
+  });
+
+  window.open(`/api/export/video?${params.toString()}`, "_blank");
+}
+
+//////////////////////////////SMS PAGE////////////////////////////////////////////////////////////
+let isUploadingSMS = false;
+
+document.getElementById("smsUploadFile").addEventListener("change", async function () {
+  if (isUploadingSMS) return;
+  isUploadingSMS = true;
+
+  const file = this.files[0];
+  if (!file) {
+    isUploadingSMS = false;
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  // 🔥 show loading toast
+  showToast("Uploading SMS...", "info");
+
+  try {
+    const res = await fetch("/api/import-sms", {
+      method: "POST",
+      body: formData
+    });
+
+    const data = await res.json();
+
+    // 🔥 success toast
+    showToast(`✔ ${data.matched} matched • ${data.totalSMS} imported`, "success");
+
+    await reloadPending();
+    await loadSMS();
+
+  } catch (err) {
+    showToast("Upload failed", "error");
+    console.error(err);
+  }
+
+  this.value = "";
+  isUploadingSMS = false;
+});
+
+async function reloadPending() {
+  currentPage = 1;
+  isLoading = false; // 🔥 force unlock
+  await load();
+}
+
+async function refreshSMS() {
+  const btn = document.getElementById("smsRefreshBtn");
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = "⏳ Refreshing...";
+  }
+
+  await loadSMS();
+
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = "🔄 Refresh";
+  }
+
+  showToast("SMS updated", "success");
+}
+
+async function resetSMS() {
+
+  if (!confirm("⚠️ This will DELETE ALL SMS data. Continue?")) return;
+
+  try {
+    const res = await fetch("/api/sms/reset", {
+      method: "DELETE"
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      showToast(`🧹 ${data.deleted} SMS records deleted`, "success");
+
+      // 🔥 refresh table
+      smsPage = 1;
+      await loadSMS();
+
+    } else {
+      showToast("Failed to reset SMS", "error");
+    }
+
+  } catch (err) {
+    console.error(err);
+    showToast("Error resetting SMS", "error");
+  }
+}
+
+async function rematchSMS() {
+  const btn = document.getElementById("rematchBtn");
+
+  // 🔥 set loading state
+  btn.disabled = true;
+  btn.innerHTML = "⏳ Re-matching...";
+
+  // 🔥 optional loading toast
+  showToast("Re-matching in progress...", "info");
+
+  try {
+    const res = await fetch("/api/rematch-sms", {
+      method: "POST"
+    });
+
+    const data = await res.json();
+
+    // 🔥 refresh table
+    await reloadPending();
+
+    // 🔥 success toast
+    showToast(`✔ ${data.matched} transactions matched`, "success");
+
+  } catch (err) {
+    showToast("Re-match failed", "error");
+    console.error(err);
+  }
+
+  // 🔥 restore button
+  btn.disabled = false;
+  btn.innerHTML = "🔄 Re-match";
+}
+
+async function loadSMS() {
+  const search = document.getElementById("smsSearch")?.value || "";
+
+  const res = await fetch(`/api/sms?page=${smsPage}&search=${encodeURIComponent(search)}`);
+  const result = await res.json();
+
+  const data = result.data || [];
+  smsTotalPages = result.totalPages || 1;
+
+  const tbody = document.getElementById("smsTable");
+
+  if (!data.length) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" class="text-center text-muted">
+          No SMS data
+        </td>
+      </tr>
+    `;
+    renderSMSPagination();
+    return;
+  }
+
+  let html = "";
+
+  data.forEach(s => {
+    html += `
+      <tr>
+        <td>${s.shop || ""}</td>
+        <td>${s.walletType || ""}</td>
+        <td>${s.direction || ""}</td>
+        <td>${s.amount || 0}</td>
+        <td>${s.phone || ""}</td>
+        <td>${s.transactionId || ""}</td>
+        <td>${s.paymentRequestId || ""}</td>
+        <td>${s.status || ""}</td>
+      </tr>
+    `;
+  });
+
+  tbody.innerHTML = html;
+
+  renderSMSPagination();
+}
+
+function renderSMSPagination() {
+  document.getElementById("smsPageInfo").innerText =
+    `Page ${smsPage} of ${smsTotalPages}`;
+}
+
+function prevSMS() {
+  if (smsPage > 1) {
+    smsPage--;
+    loadSMS();
+  }
+}
+
+function nextSMS() {
+  if (smsPage < smsTotalPages) {
+    smsPage++;
+    loadSMS();
+  }
+}
+
+let smsSearchTimeout;
+
+document.getElementById("smsSearch").addEventListener("input", () => {
+  clearTimeout(smsSearchTimeout);
+
+  smsSearchTimeout = setTimeout(() => {
+    smsPage = 1;
+    loadSMS();
+  }, 300);
+});
+
+///////////////////////Create User Modal/////////////////////
+function openCreateUserModal() {
+  document.getElementById("createUserModal").style.display = "flex";
+}
+
+function closeCreateUserModal() {
+  document.getElementById("createUserModal").style.display = "none";
+}
+
+async function createUser() {
+  const username = document.getElementById("newUsername").value;
+  const password = document.getElementById("newPassword").value;
+  const role = document.getElementById("newRole").value;
+
+  if (!username || !password) {
+    showToast("Fill all fields", false);
+    return;
+  }
+
+  const res = await fetch("/api/register", {
+  method: "POST",
+  headers: {"Content-Type": "application/json"},
+  body: JSON.stringify({ username, password, role }),
+  credentials: "include"
+});
+
+  const data = await res.json();
+
+  if (data.success) {
+    showToast("User created");
+    closeCreateUserModal();
+  } else {
+    showToast(data.message || "Failed", false);
+  }
+}
+
+async function loadUsers() {
+  const res = await fetch("/api/users", {
+    credentials: "include"
+  });
+  const data = await res.json();
+
+  const tbody = document.getElementById("usersTable");
+  tbody.innerHTML = "";
+
+  data.forEach(u => {
+
+  // 🟢 ONLINE / OFFLINE
+  let onlineBadge = `<span class="badge bg-secondary">Offline</span>`;
+
+if (u.lastActive) {
+  const lastActiveDate = new Date(u.lastActive + "Z");
+  const diff = Date.now() - lastActiveDate.getTime();
+
+  if (diff < 2 * 60 * 1000) {
+    onlineBadge = `<span class="badge bg-success">Online</span>`;
+  }
+}
+
+  // ⏱ LAST SEEN (✅ CORRECT PLACE)
+  let lastSeen = "-";
+
+if (u.lastActive) {
+  const lastActiveDate = new Date(u.lastActive + "Z");
+  const diffMs = Date.now() - lastActiveDate.getTime();
+
+  const mins = Math.floor(diffMs / 60000);
+  const hours = Math.floor(mins / 60);
+  const days = Math.floor(hours / 24);
+
+  if (mins < 1) {
+    lastSeen = "🟢 Online now";
+  } else if (mins < 60) {
+    lastSeen = `🕒 ${mins} min ago`;
+  } else if (hours < 24) {
+    lastSeen = `🕒 ${hours} hr ago`;
+  } else {
+    lastSeen = `🕒 ${days} day ago`;
+  }
+}
+
+  // 🎨 STATUS
+  const statusColor = {
+    ACTIVE: "success",
+    INACTIVE: "secondary",
+    LOCKED: "warning",
+    DISABLED: "danger"
+  };
+
+  const statusBadge = `<span class="badge bg-${statusColor[u.status] || "secondary"}">${u.status || "ACTIVE"}</span>`;
+
+  // ✅ RENDER
+  tbody.innerHTML += `
+    <tr>
+      <td>${u.id}</td>
+      <td>${u.username}</td>
+
+      <td>
+        <select onchange="changeRole(${u.id}, this.value)" class="form-control form-control-sm">
+          <option ${u.role === "user" ? "selected" : ""}>user</option>
+          <option ${u.role === "admin" ? "selected" : ""}>admin</option>
+          <option ${u.role === "developer" ? "selected" : ""}>developer</option>
+        </select>
+      </td>
+
+      <td>${onlineBadge}</td>
+
+      <!-- ✅ THIS IS NOW CORRECT -->
+      <td title="${new Date(u.lastActive + "Z").toLocaleString("en-PH", { timeZone: "Asia/Manila" })}">
+  ${lastSeen}
+</td>
+
+      <td>
+        ${statusBadge}
+        <br>
+        <select onchange="updateUserStatus(${u.id}, this.value)" class="form-control form-control-sm mt-1">
+          <option ${u.status === "ACTIVE" ? "selected" : ""}>ACTIVE</option>
+          <option ${u.status === "INACTIVE" ? "selected" : ""}>INACTIVE</option>
+          <option ${u.status === "LOCKED" ? "selected" : ""}>LOCKED</option>
+          <option ${u.status === "DISABLED" ? "selected" : ""}>DISABLED</option>
+        </select>
+      </td>
+
+      <td>
+        <button onclick="deleteUser(${u.id})" class="btn btn-danger btn-sm">Delete</button>
+      </td>
+    </tr>
+  `;
+});
+}
+
+function applyRoleUI() {
+  if (!["admin", "developer"].includes(currentUser.role)) {
+    document.querySelectorAll("#adminActions button").forEach(btn => {
+      btn.disabled = true;
+      btn.title = "Admin only";
+    });
+  }
+}
+
+async function changeRole(id, role) {
+  await fetch("/api/user-role", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ id, role }),
+    credentials: "include"
+  });
+
+  showToast("Role updated");
+}
+
+async function deleteUser(id) {
+  if (!confirm("Delete user?")) return;
+
+  await fetch("/api/user-delete", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ id }),
+    credentials: "include"
+  });
+
+  showToast("Deleted");
+  loadUsers();
+}
+
+function openChangePasswordModal() {
+  document.getElementById("changePasswordModal").style.display = "flex";
+}
+
+function closeChangePasswordModal() {
+  document.getElementById("changePasswordModal").style.display = "none";
+}
+
+async function changePassword() {
+  const btn = document.getElementById("changePassBtn");
+
+  btn.disabled = true;
+  btn.innerText = "Saving...";
+
+  const current = document.getElementById("currentPassword").value;
+  const newPass = document.getElementById("newPasswordChange").value; // 🔥 FIX ID
+  const confirm = document.getElementById("confirmPassword").value;
+
+  if (!current || !newPass || !confirm) {
+    showToast("Fill all fields", false);
+    btn.disabled = false;
+    btn.innerText = "Update";
+    return;
+  }
+
+  if (newPass !== confirm) {
+    showToast("Passwords do not match", false);
+    btn.disabled = false;
+    btn.innerText = "Update";
+    return;
+  }
+
+  const res = await fetch("/api/change-password", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      currentPassword: current,
+      newPassword: newPass
+    }),
+    credentials: "include"
+  });
+
+  const data = await res.json();
+
+  if (data.success) {
+    showToast("Password updated");
+
+    document.getElementById("currentPassword").value = "";
+    document.getElementById("newPasswordChange").value = "";
+    document.getElementById("confirmPassword").value = "";
+
+    closeChangePasswordModal();
+  } else {
+    showToast(data.message || "Failed", false);
+  }
+
+  btn.disabled = false;
+  btn.innerText = "Update";
+}
+
+async function updateUserStatus(id, status) {
+  await fetch("/api/user/status", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ userId: id, status })
+  });
+
+  showToast("Status updated");
+}
+
+const statusColor = {
+  ACTIVE: "success",
+  INACTIVE: "secondary",
+  LOCKED: "warning",
+  DISABLED: "danger"
+};
+
+// ===== USERS AUTO REFRESH =====
+let usersInterval;
+
+function startUsersAutoRefresh() {
+  if (usersInterval) return;
+
+  usersInterval = setInterval(() => {
+    const page = document.getElementById("usersPage");
+    if (page && page.style.display !== "none") {
+      loadUsers();
+    }
+  }, 10000);
+}
+startUsersAutoRefresh();
+
+////////////////////////Syncing Indicator////////////////////////
+let isSyncing = false;
+setInterval(async () => {
+  const res = await fetch("/api/sync-status");
+  const data = await res.json();
+
+  const banner = document.getElementById("syncStatus");
+
+  if (data.syncing) {
+    banner.style.display = "block";
+    banner.innerText = "🔄 Sync in progress...";
+  } else {
+    banner.style.display = "none";
+  }
+}, 2000);
+
+setInterval(() => {
+  const dashboardVisible =
+    document.getElementById("dashboardPage").style.display === "block";
+
+  if (dashboardVisible) loadDashboard();
+}, 10000);
+
+setInterval(() => {
+  const page = document.getElementById("settingsPage");
+
+  if (page && page.style.display === "block") {
+    loadLogs();
+  }
+}, 5000);
+
+const getColor = (level) => {
+  if (level === "ERROR") return "#ff4d4f";
+  if (level === "WARN") return "#facc15";
+  return "#0f0";
+};
+
+</script>
+
+<div id="assignModal" style="
+  display:none;
+  position:fixed;
+  top:0; left:0;
+  width:100%; height:100%;
+  background:rgba(0,0,0,0.5);
+  justify-content:center;
+  align-items:center;
+  z-index:9999;
+">
+  <div style="background:white; padding:20px; border-radius:8px; width:300px;">
+    <h5>Assign Group</h5>
+
+    <!-- 🔍 SEARCH -->
+    <input
+      type="text"
+      id="groupSearch"
+      class="form-control mb-2"
+      placeholder="🔍 Search group..."
+      onkeyup="filterGroups()"
+    >
+
+    <!-- 👇 YOUR EXISTING SELECT -->
+    <select id="groupSelect" class="form-control mb-2" size="10"></select>
+
+    <button onclick="confirmAssign()" class="btn btn-success btn-sm">Send</button>
+    <button onclick="closeModal()" class="btn btn-secondary btn-sm">Cancel</button>
+  </div>
+</div>
+
+<div id="confirmModal" style="
+  display:none;
+  position:fixed;
+  top:0; left:0;
+  width:100%; height:100%;
+  background:rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+  justify-content:center;
+  align-items:center;
+  z-index:10000;
+">
+  <div style="
+    background:#0f172a;
+    color:white;
+    padding:20px;
+    border-radius:12px;
+    width:320px;
+    box-shadow:0 10px 40px rgba(0,0,0,0.6);
+  ">
+    <div style="margin-bottom:15px; font-size:15px;">
+      📤 Send to Telegram?
+    </div>
+
+    <div style="display:flex; justify-content:flex-end; gap:10px;">
+      <button onclick="closeConfirm(false)" class="btn btn-secondary btn-sm">Cancel</button>
+      <button onclick="closeConfirm(true)" class="btn btn-success btn-sm">OK</button>
+    </div>
+  </div>
+</div>
+
+<div id="createUserModal" class="modal">
+  <div class="modal-content">
+    <h2>Create Account</h2>
+
+    <input id="newUsername" placeholder="Username">
+    <input id="newPassword" type="password" placeholder="Password">
+
+    <select id="newRole">
+      <option value="user">User</option>
+      <option value="admin">Admin</option>
+      <option value="developer">Developer</option>
+    </select>
+
+    <div class="modal-actions">
+      <button onclick="createUser()" class="btn-primary">Create</button>
+      <button onclick="closeCreateUserModal()" class="btn-secondary">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHANGE PASSWORD MODAL -->
+<div id="changePasswordModal" class="modal">
+  <div class="modal-content">
+    <h2>Change Password</h2>
+
+    <input id="currentPassword" type="password" placeholder="Current Password">
+    <input id="newPasswordChange" type="password" placeholder="New Password">
+    <input id="confirmPassword" type="password" placeholder="Confirm Password">
+
+    <div class="modal-actions">
+      <button id="changePassBtn" onclick="changePassword()" class="btn-primary">Update</button>
+      <button onclick="closeChangePasswordModal()" class="btn-secondary">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="syncModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h5 class="modal-title">🔄 Sync Options</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body text-center">
+        <p>Select what to sync:</p>
+
+        <button class="btn btn-primary w-100 mb-2"
+          onclick="runSync('all')">
+          🔄 Sync ALL Data
+        </button>
+
+        <button class="btn btn-warning w-100"
+          onclick="runSync('checking')">
+          🟡 Sync CHECKING Only
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="imageModal" class="modal">
+  <div class="modal-content" style="max-width:600px; text-align:center;">
+    <span onclick="closeImageModal()" style="cursor:pointer; float:right; font-size:20px;">✖</span>
+
+    <img id="modalImage" src="" style="max-width:100%; border-radius:10px; margin-top:10px;" />
+
+    <div id="modalLink" style="margin-top:10px;"></div>
+  </div>
+</div>
+
+<div id="logConfigModal" style="
+  display:none;
+  position: fixed;
+  top:0; left:0;
+  width:100%; height:100%;
+  background: rgba(0,0,0,0.6);
+  z-index:9999;
+">
+  <div style="
+    background:#fff;
+    padding:20px;
+    width:350px;
+    margin:100px auto;
+    border-radius:10px;
+  ">
+    <h5>🔐 Log Settings</h5>
+
+    <input id="accessPassword" type="password" class="form-control mb-2" placeholder="Enter Password">
+
+    <div id="logConfigFields" style="display:none;">
+      <input id="newChatId" class="form-control mb-2" placeholder="Chat ID">
+      <input id="newPassword" type="password" class="form-control mb-2" placeholder="New Password">
+
+      <button onclick="saveLogSettingsSecure()" class="btn btn-success btn-sm">💾 Save</button>
+    </div>
+
+    <button type="button" onclick="verifyAccess()" class="btn btn-primary btn-sm mt-2">
+  Enter
+</button>
+
+<button type="button" onclick="closeLogModal()" class="btn btn-secondary btn-sm mt-2">
+  Cancel
+</button>
+  </div>
+</div>
+
+<div id="videoModal" class="modal">
+  <div class="modal-content">
+    <h2>Add Video Case</h2>
+
+    <input id="v_agent" placeholder="Agent" />
+    <input id="v_ref" placeholder="Reference" />
+    <input id="v_customer" placeholder="Customer" />
+    <input id="v_amount" type="number" placeholder="Amount" />
+    <input id="v_date" type="date" />
+    <input id="v_video" placeholder="Video URL" />
+
+    <div class="modal-actions">
+      <button onclick="submitVideo()">Submit</button>
+      <button onclick="closeVideoModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="videoSyncModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+
+      <!-- HEADER -->
+      <div class="modal-header">
+        <h5 class="modal-title">Sync Video Case</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <!-- BODY (🔥 IMPORTANT) -->
+      <div class="modal-body">
+
+        <label>Agent Group</label>
+        <select id="syncAgentGroup" class="form-select mb-2">
+          <option value="">All</option>
+          <option value="SSP">SSP</option>
+          <option value="ESS">ESS</option>
+          <option value="XSP">XSP</option>
+          <option value="ATP">ATP</option>
+          <option value="BKK">BKK</option>
+        </select>
+
+        <label>Status Filter</label>
+        <select id="syncStatusFilter" class="form-select">
+          <option value="">All</option>
+          <option value="Case Close">Case Close</option>
+          <option value="No Attach Video">No Attach Video</option>
+          <option value="Waiting Agent Update">Waiting Agent Update</option>
+          <option value="Other">Other</option>
+        </select>
+
+      </div>
+
+      <!-- FOOTER -->
+      <div class="modal-footer">
+        <button onclick="runVideoSync()" class="btn btn-primary">Start Sync</button>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+  <div id="exportModal" class="modal">
+  <div class="modal-content">
+    <h5>Export Pending</h5>
+
+    <select id="exportType" class="form-control mb-3">
+      <option value="all">Export All</option>
+      <option value="smsMatched">SMS Matched</option>
+      <option value="notMatched">Not Matched</option>
+    </select>
+
+    <div class="modal-actions">
+      <button onclick="confirmExport()" class="btn btn-success btn-sm">
+        ⬇ Export
+      </button>
+      <button onclick="closeExportModal()" class="btn btn-secondary btn-sm">
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>
