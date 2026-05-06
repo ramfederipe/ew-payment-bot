@@ -80,6 +80,16 @@ range: `${sheetName}!A:Z`,
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
 
+    const trxIdColIndex = 13;
+    const trxIdRaw = (row[trxIdColIndex] || "").trim();
+
+    if (mode === "checking") {
+      if (trxIdRaw !== "") {
+        console.log("⏭️ SKIP (COLUMN N NOT EMPTY):", trxIdRaw);
+        continue;
+      }
+    }
+
     const agentNumber = safeGet(row, ["agent number"]);
     const depositId = safeGet(row, ["deposit id"]);
     const ref = safeGet(row, ["reference no"]);

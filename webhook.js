@@ -257,7 +257,7 @@ app.get("/api/transactions", requireAuth, (req, res) => {
   const sent = req.query.sent;
   const smsMatched = req.query.smsMatched;
 
-  let where = `WHERE (actionStatus = 'PENDING' OR actionStatus IS NULL)`;
+  let where = `WHERE 1=1`;
   const params = [];
 
   if (brand) {
@@ -277,7 +277,7 @@ app.get("/api/transactions", requireAuth, (req, res) => {
 
   if (agentPrefix) {
   where += ` AND agentName LIKE ?`;
-  params.push(`%${agentPrefix}%`);
+  params.push(`${agentPrefix}%`);
   }
 
   if (status) {
@@ -322,36 +322,83 @@ app.get("/api/transactions", requireAuth, (req, res) => {
 });
 
 // 🔄 Sync
-app.post("/api/sync", async (req, res) => {
+app.post("/api/sync", requireAuth, async (req, res) => {
   const { mode = "all" } = req.body;
+  const user = req.session.user;
+
+  // 🔒 role restriction
+  if (!["admin", "developer"].includes(user.role)) {
+    return res.status(403).json({
+      success: false,
+      error: "Access denied"
+    });
+  }
+
+  // 🔥 admin cannot run FULL sync
+  if (user.role === "admin" && mode === "all") {
+    return res.status(403).json({
+      success: false,
+      error: "Admin cannot run full sync"
+    });
+  }
+
   if (isSyncing) {
     return res.json({ success: false, message: "Already syncing" });
   }
 
   const io = getIO();
-
   isSyncing = true;
+
   io.emit("sync-status", { syncing: true });
 
+  // 🔔 🔥 SYNC START NOTIFICATION
+  createNotification({
+    type: "SYNC",
+    title: "Sync Started",
+    message: `${user.username} started Sync (${mode})`,
+    target: "ALL"
+  });
+
   try {
-    addLog("INFO", `Sync started (mode: ${mode})`);
-    console.log("🔄 Sync started...");
-    await syncSheets(mode);
+    addLog("INFO", `Sync started (${mode}) by ${user.username} (${user.role})`);
+    console.log(`🔄 Sync started by ${user.username} (${user.role})`);
+
+    const result = await syncSheets(mode); 
+    // 👆 OPTIONAL: return stats from sync
 
     console.log("✅ Sync finished");
-    addLog("INFO", `Sync completed successfully (mode: ${mode})`);
+    addLog("INFO", `Sync completed (${mode}) by ${user.username}`);
+
+    // 🔔 🔥 SYNC FINISH NOTIFICATION
+    createNotification({
+      type: "SYNC",
+      title: "Sync Completed",
+      message: `${user.username} finished Sync (${mode})`,
+      meta: result || {}, // 👈 include stats if available
+      target: "ALL"
+    });
+
     res.json({ success: true });
 
   } catch (err) {
     console.error("❌ Sync error:", err);
     addLog("ERROR", `Sync failed: ${err.message}`);
+
+    // 🔔 🔥 SYNC ERROR NOTIFICATION
+    createNotification({
+      type: "SYNC",
+      title: "Sync Failed",
+      message: `${user.username} failed Sync (${mode})`,
+      meta: { error: err.message },
+      target: "ALL"
+    });
+
     res.status(500).json({
       success: false,
       error: err.message
     });
 
   } finally {
-    // 🔥 ALWAYS runs (even if error)
     isSyncing = false;
     io.emit("sync-status", { syncing: false });
   }
@@ -383,43 +430,115 @@ server.listen(process.env.PORT, "0.0.0.0", () => {
 });
 
 app.post("/api/update", requireAdmin, async (req, res) => {
-  const { ref, brand, status, reason, username } = req.body;
+  const { ref, status, reason, username } = req.body;
 
-  const actionStatus =
-    status === "RECEIVED" ? "APPROVED" : "REJECTED";
+  const user = username || req.session.user.username;
+
+  if (!ref || !status) {
+    return res.status(400).json({
+      success: false,
+      message: "Missing ref or status"
+    });
+  }
 
   try {
-    // ✅ 1. WAIT for DB update
-    await new Promise((resolve, reject) => {
-      db.run(`
+    let query = "";
+    let params = [];
+
+    // ✅ AGENT ANSWER
+    if (status === "RECEIVED" || status === "NOT RECEIVED") {
+      query = `
+        UPDATE transactions
+        SET agentStatus = ?
+        WHERE transactionReference = ?
+      `;
+      params = [status, ref];
+    }
+
+    // ✅ APPROVED
+    else if (status === "APPROVED") {
+      query = `
         UPDATE transactions
         SET 
-          agentStatus = ?,
-          actionStatus = ?,
+          actionStatus = 'APPROVED',
           reason = ?,
           settledBy = ?,
           settledAt = datetime('now', '+8 hours')
-        WHERE transactionReference = ? AND brand = ?
-      `, [status, actionStatus, reason || "", username || "", ref, brand], function(err) {
+        WHERE transactionReference = ?
+      `;
+      params = [reason || "", user, ref];
+    }
+
+    // ❌ REJECTED
+    else if (status === "REJECTED") {
+      query = `
+        UPDATE transactions
+        SET 
+          actionStatus = 'REJECTED',
+          reason = ?,
+          settledBy = ?,
+          settledAt = datetime('now', '+8 hours')
+        WHERE transactionReference = ?
+      `;
+      params = [reason || "", user, ref];
+    }
+
+    // 🔥 EXECUTE
+    const result = await new Promise((resolve, reject) => {
+      db.run(query, params, function(err) {
         if (err) reject(err);
-        else resolve();
+        else resolve(this);
       });
     });
 
-    // ✅ 2. THEN update Google Sheet
-    await updateStatusByRef(
-      ref,
-      actionStatus,
-      username,
-      null,       // or chatId if available
-      reason,
-      brand
-    );
+    if (!result || result.changes === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No rows updated (ref not found)"
+      });
+    }
+
+    // 🔥 GET INFO (NO BRAND NEEDED)
+    db.get(`
+      SELECT depositId, amount, agentName 
+      FROM transactions 
+      WHERE transactionReference = ?
+    `, [ref], (err, row) => {
+
+      if (!row) return;
+
+      if (status === "APPROVED" || status === "REJECTED") {
+        createNotification({
+          type: "SETTLED",
+          title: status === "APPROVED"
+            ? "Deposit Approved"
+            : "Deposit Rejected",
+
+          message: `${user} ${status.toLowerCase()} ${row.depositId} (${row.amount}) • ${row.agentName}`,
+
+          meta: {
+            depositIds: [row.depositId],
+            status
+          },
+
+          target: "ALL"
+        });
+      }
+    });
 
     res.json({ success: true });
 
   } catch (err) {
     console.log("❌ UPDATE ERROR:", err.message);
+
+    createNotification({
+      type: "SYSTEM",
+      title: "Update Failed",
+      message: `${user} failed to update ${ref}`,
+      meta: { error: err.message },
+      target: "ALL"
+    });
+
     res.status(500).json({ success: false });
   }
 });
@@ -649,40 +768,65 @@ app.post("/api/manual-add", requireAuth, (req, res) => {
     image
   } = req.body;
 
-  db.run(`
-  INSERT INTO transactions (
-    transactionReference,
-    depositId,
-    agentName,
-    customerNumber,
-    amount,
-    depositDate,
-    agentNumber,
-    imageLink,
-    essStatus,
-    status,
-    actionStatus,
-    agentStatus,
-    brand
-  )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, [
-  ref,
-  depositId,
-  agent,
-  customer,
-  amount,
-  date,
-  agentNo,
-  image,
-  "MANUAL",
-  "PENDING",
-  "PENDING",
-  null,
-  "MANUAL"
-]);
+  const sql = `
+    INSERT INTO transactions (
+      transactionReference,
+      depositId,
+      agentName,
+      customerNumber,
+      amount,
+      depositDate,
+      agentNumber,
+      imageLink,
+      essStatus,
+      status,
+      actionStatus,
+      agentStatus,
+      brand
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
 
-  res.json({ success: true });
+  db.run(sql, [
+    ref,
+    depositId,
+    agent,
+    customer,
+    amount,
+    date,
+    agentNo,
+    image,
+    "MANUAL",
+    "PENDING",
+    "PENDING",
+    null,
+    "MANUAL"
+  ], function (err) {
+
+    // 🔥 HANDLE ERROR PROPERLY
+    if (err) {
+      console.error("❌ Insert error:", err.message);
+
+      if (err.code === "SQLITE_CONSTRAINT") {
+        return res.status(400).json({
+          success: false,
+          type: "duplicate",
+          message: "Duplicate reference + deposit ID"
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        message: "Database error"
+      });
+    }
+
+    // ✅ SUCCESS
+    res.json({
+      success: true,
+      id: this.lastID
+    });
+  });
 });
 
 app.post("/api/edit", requireAuth, (req, res) => {
@@ -1011,7 +1155,8 @@ app.post("/api/log-settings", requireAuth, (req, res) => {
 
 app.post("/api/send-logs", requireAuth, async (req, res) => {
   const { password } = req.body;
-  const userId = req.session.user.id;
+  const user = req.session.user;
+  const userId = user.id;
 
   db.get(`SELECT * FROM log_settings WHERE id = 1`, async (err, settings) => {
 
@@ -1029,6 +1174,14 @@ app.post("/api/send-logs", requireAuth, async (req, res) => {
       return res.json({ success: false, message: "Invalid password" });
     }
 
+    // 🔔 🔥 START NOTIFICATION
+    createNotification({
+      type: "SYSTEM",
+      title: "Log Export Started",
+      message: `${user.username} is exporting system logs`,
+      target: "ALL"
+    });
+
     db.all(`SELECT * FROM system_logs ORDER BY id DESC LIMIT 100`, async (err, logs) => {
 
       const text = logs.map(l =>
@@ -1036,16 +1189,38 @@ app.post("/api/send-logs", requireAuth, async (req, res) => {
       ).join("\n");
 
       try {
-        const chunks = text.match(/[\s\S]{1,3500}/g);
+        const chunks = text.match(/[\s\S]{1,3500}/g) || [];
+
+        let sent = 0;
 
         for (const chunk of chunks) {
           await bot.sendMessage(settings.chatId, chunk);
+          sent++;
         }
+
+        // 🔔 🔥 SUCCESS NOTIFICATION
+        createNotification({
+          type: "TG",
+          title: "Logs Sent to Telegram",
+          message: `${user.username} sent ${logs.length} logs (${sent} chunks)`,
+          meta: { totalLogs: logs.length, chunks: sent },
+          target: "ALL"
+        });
 
         res.json({ success: true });
 
       } catch (err) {
         console.error(err);
+
+        // 🔔 🔥 ERROR NOTIFICATION
+        createNotification({
+          type: "SYSTEM",
+          title: "Log Export Failed",
+          message: `${user.username} failed to send logs`,
+          meta: { error: err.message },
+          target: "ALL"
+        });
+
         res.json({ success: false, message: "Telegram failed" });
       }
     });
@@ -1155,15 +1330,21 @@ app.use((req, res, next) => {
 });
 
 app.get("/api/me", (req, res) => {
-  res.json(req.session.user || {});
+  if (!req.session.user) {
+    return res.status(401).json(null);
+  }
+
+  res.json(req.session.user);
 });
 
-async function safeFetch(url, options) {
-  credentials: "include"
-  const res = await fetch(url, options);
+async function safeFetch(url, options = {}) {
+  const res = await fetch(url, {
+    ...options,
+    credentials: "include" // ✅ THIS is the fix
+  });
 
   if (res.status === 401) {
-    return null; // or handle differently
+    return null;
   }
 
   return res;
@@ -1207,6 +1388,7 @@ app.post("/api/assign-group", requireAdmin, (req, res) => {
 
 app.post("/api/send/:id", requireAuth, async (req, res) => {
   const id = req.params.id;
+  const user = req.session.user;
 
   db.get(`SELECT * FROM transactions WHERE id = ?`, [id], async (err, row) => {
 
@@ -1241,10 +1423,31 @@ app.post("/api/send/:id", requireAuth, async (req, res) => {
 
       addLog("INFO", `Transaction sent (ID ${id}, Agent: ${row.agentName})`);
 
+      // 🔔🔥 THIS IS WHAT YOU WERE MISSING
+      createNotification({
+        type: "TG",
+        title: "Sent to Telegram",
+        message: `${user.username} sent deposit ${row.depositId}`,
+        meta: {
+          depositIds: [row.depositId]
+        },
+        target: "ALL"
+      });
+
       res.json({ success: true });
 
     } catch (err) {
       console.error("❌ SEND ERROR:", err);
+
+      // 🔔 ERROR NOTIFICATION (VERY IMPORTANT)
+      createNotification({
+        type: "SYSTEM",
+        title: "Send Failed",
+        message: `${user.username} failed to send ${row.depositId}`,
+        meta: { error: err.message },
+        target: "ALL"
+      });
+
       res.json({ success: false, message: err.message });
     }
   });
@@ -1295,10 +1498,39 @@ app.get("/api/chatid/status", (req, res) => {
 ////////////////////Pending Delete,Edit,//////////////////
 app.post("/api/delete", requireAdminOrDev, (req, res) => {
   const { id } = req.body;
+  const user = req.session.user.username;
 
-  db.run(`DELETE FROM transactions WHERE id = ?`, [id], (err) => {
-    if (err) return res.json({ success: false });
-    res.json({ success: true });
+  // 🔥 STEP 1: get depositId before delete
+  db.get(`SELECT depositId FROM transactions WHERE id = ?`, [id], (err, row) => {
+
+    if (err || !row) {
+      return res.json({ success: false });
+    }
+
+    const depositId = row.depositId;
+
+    // 🔥 STEP 2: delete
+    db.run(`DELETE FROM transactions WHERE id = ?`, [id], function(err) {
+
+      if (err) return res.json({ success: false });
+
+      if (this.changes === 0) {
+        return res.json({ success: true });
+      }
+
+      addLog("WARN", `Deleted transaction ${depositId}`, user);
+
+      // 🔔 NOTIFICATION
+      createNotification({
+        type: "SYSTEM",
+        title: "Row Deleted",
+        message: `${user} deleted deposit ${depositId}`,
+        meta: { depositIds: [depositId] },
+        target: "ALL"
+      });
+
+      res.json({ success: true });
+    });
   });
 });
 
@@ -1314,6 +1546,8 @@ app.post("/api/edit-full", requireAdmin, (req, res) => {
     agentNo,
     image
   } = req.body;
+
+  const user = req.session.user.username;
 
   db.run(`
     UPDATE transactions SET
@@ -1336,36 +1570,83 @@ app.post("/api/edit-full", requireAdmin, (req, res) => {
     agentNo,
     image,
     id
-  ], (err) => {
+  ], function (err) {
+
     if (err) return res.json({ success: false });
+
+    if (this.changes === 0) {
+      return res.json({ success: true });
+    }
+
+    addLog("INFO", `Edited transaction ${depositId}`, user);
+
+    // 🔔 NOTIFICATION
+    createNotification({
+      type: "SYSTEM",
+      title: "Deposit Updated",
+      message: `${user} edited deposit ${depositId}`,
+      meta: { depositIds: [depositId] },
+      target: "ALL"
+    });
+
     res.json({ success: true });
   });
 });
 
 app.post("/api/clean-empty", requireAdminOrDev, (req, res) => {
   const { confirm } = req.body;
+  const user = req.session.user.username;
 
   if (confirm !== "YES") {
     return res.status(400).json({ error: "Confirmation required" });
   }
 
-  db.run(`
-    DELETE FROM transactions
+  // 🔥 GET affected rows first (optional but useful)
+  db.all(`
+    SELECT depositId FROM transactions
     WHERE 
       (transactionReference IS NULL OR TRIM(transactionReference) = '' OR LOWER(transactionReference) = 'null')
       AND
       (amount IS NULL OR TRIM(amount) = '' OR amount = 0)
-  `, function(err) {
-    if (err) {
-      console.error("❌ CLEAN ERROR:", err);
-      return res.json({ success: false });
-    }
+  `, (err, rows) => {
 
-    console.log("🧹 Deleted rows:", this.changes);
+    if (err) return res.json({ success: false });
 
-    res.json({
-      success: true,
-      deleted: this.changes
+    const depositIds = rows.map(r => r.depositId).filter(Boolean);
+
+    // 🔥 DELETE
+    db.run(`
+      DELETE FROM transactions
+      WHERE 
+        (transactionReference IS NULL OR TRIM(transactionReference) = '' OR LOWER(transactionReference) = 'null')
+        AND
+        (amount IS NULL OR TRIM(amount) = '' OR amount = 0)
+    `, function(err) {
+
+      if (err) {
+        console.error("❌ CLEAN ERROR:", err);
+        return res.json({ success: false });
+      }
+
+      if (this.changes === 0) {
+        return res.json({ success: true, deleted: 0 });
+      }
+
+      addLog("WARN", `Cleaned ${this.changes} empty transactions`, user);
+
+      // 🔔 NOTIFICATION
+      createNotification({
+        type: "SYSTEM",
+        title: "Clean Empty Data",
+        message: `${user} deleted ${this.changes} empty transactions`,
+        meta: { depositIds },
+        target: "ALL"
+      });
+
+      res.json({
+        success: true,
+        deleted: this.changes
+      });
     });
   });
 });
@@ -1386,30 +1667,125 @@ app.post("/api/transactions/bulk-reject", requireAdminOrDev, (req, res) => {
   const placeholders = cleanIds.map(() => "?").join(",");
   const user = req.session?.user?.username || "unknown";
 
-  db.run(
-    `UPDATE transactions 
-     SET 
-        agentStatus = 'NOT RECEIVED',
-        actionStatus = 'REJECTED',
-        reason = 'Bulk rejected',
-        settledBy = ?,
-        settledAt = datetime('now', '+8 hours')
-     WHERE id IN (${placeholders})
-     AND actionStatus != 'REJECTED'`,
-    [user, ...cleanIds],
-    function (err) {
+  // 🔥 STEP 1: GET REAL DEPOSIT IDS
+  db.all(
+    `SELECT id, depositId FROM transactions WHERE id IN (${placeholders})`,
+    cleanIds,
+    (err, rows) => {
+
       if (err) {
-        console.error("❌ BULK REJECT ERROR:", err);
-        addLog("ERROR", `Bulk reject failed: ${err.message}`, user);
+        console.error("❌ FETCH ERROR:", err);
         return res.json({ success: false });
       }
 
-      addLog("WARN", `Bulk rejected ${this.changes} transactions`, user);
+      const depositIds = rows.map(r => r.depositId);
 
-      res.json({ 
-        success: true, 
-        updated: this.changes 
-      });
+      // 🔥 STEP 2: UPDATE
+      db.run(
+        `UPDATE transactions 
+         SET 
+            agentStatus = 'NOT RECEIVED',
+            actionStatus = 'REJECTED',
+            reason = 'Bulk rejected',
+            settledBy = ?,
+            settledAt = datetime('now', '+8 hours')
+         WHERE id IN (${placeholders})
+         AND actionStatus != 'REJECTED'`,
+        [user, ...cleanIds],
+        function (err) {
+
+          if (err) {
+            console.error("❌ BULK REJECT ERROR:", err);
+            addLog("ERROR", `Bulk reject failed: ${err.message}`, user);
+            return res.json({ success: false });
+          }
+
+          // 🔥 NO CHANGES (avoid useless notif)
+          if (this.changes === 0) {
+            return res.json({ success: true, updated: 0 });
+          }
+
+          addLog("WARN", `Bulk rejected ${this.changes} transactions`, user);
+
+          // 🔔 NOTIFICATION
+          createNotification({
+            type: "BULK",
+            title: "Bulk Rejected",
+            message: `${user} rejected ${this.changes} deposits`,
+            meta: { depositIds },
+            target: "ALL"
+          });
+
+          res.json({ success: true, updated: this.changes });
+        }
+      );
+    }
+  );
+});
+
+app.post("/api/transactions/bulk-delete", requireAdminOrDev, (req, res) => {
+  const { ids } = req.body;
+
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "No valid IDs provided" });
+  }
+
+  const cleanIds = ids.map(id => parseInt(id)).filter(id => !isNaN(id));
+
+  if (cleanIds.length === 0) {
+    return res.status(400).json({ error: "Invalid IDs" });
+  }
+
+  const placeholders = cleanIds.map(() => "?").join(",");
+  const user = req.session?.user?.username || "unknown";
+
+  // 🔥 STEP 1: GET DEPOSIT IDS BEFORE DELETE
+  db.all(
+    `SELECT depositId FROM transactions WHERE id IN (${placeholders})`,
+    cleanIds,
+    (err, rows) => {
+
+      if (err) {
+        console.error("❌ FETCH ERROR:", err);
+        return res.json({ success: false });
+      }
+
+      const depositIds = rows.map(r => r.depositId);
+
+      // 🔥 STEP 2: DELETE
+      db.run(
+        `DELETE FROM transactions WHERE id IN (${placeholders})`,
+        cleanIds,
+        function (err) {
+
+          if (err) {
+            console.error("❌ BULK DELETE ERROR:", err);
+            addLog("ERROR", `Bulk delete failed: ${err.message}`, user);
+            return res.json({ success: false });
+          }
+
+          // 🔥 NO CHANGES
+          if (this.changes === 0) {
+            return res.json({ success: true, deleted: 0 });
+          }
+
+          addLog("WARN", `Bulk deleted ${this.changes} transactions`, user);
+
+          // 🔔 NOTIFICATION
+          createNotification({
+            type: "BULK",
+            title: "Bulk Deleted",
+            message: `${user} deleted ${this.changes} deposits`,
+            meta: { depositIds },
+            target: "ALL"
+          });
+
+          res.json({
+            success: true,
+            deleted: this.changes
+          });
+        }
+      );
     }
   );
 });
@@ -1566,6 +1942,13 @@ app.post("/api/register", requireAuth, async (req, res) => {
           return res.json({ success: false, message: "User exists" });
         }
 
+        createNotification({
+  type: "USER",
+  title: "New User Created",
+  message: `${currentUser.username} created ${username} (${role})`,
+  target: "ALL"
+});
+
         res.json({ success: true });
       }
     );
@@ -1653,6 +2036,13 @@ app.post("/api/change-password", async (req, res) => {
       (err) => {
         if (err) return res.json({ success: false });
 
+        createNotification({
+  type: "USER",
+  title: "Password Changed",
+  message: `${req.session.user.username} changed password`,
+  target: req.session.user.username
+});
+
         res.json({ success: true });
       }
     );
@@ -1738,6 +2128,14 @@ app.post("/api/reset-video-cases", requireAuth, (req, res) => {
     }
 
     console.log("🧹 All video cases deleted");
+
+    createNotification({
+  type: "SYSTEM",
+  title: "System Reset",
+  message: `${req.session.user.username} reset transactions`,
+  target: "ALL"
+});
+
     res.json({ success: true });
   });
 });
@@ -1889,50 +2287,50 @@ app.get("/api/dashboard", requireAuth, (req, res) => {
     `, (err, pendingRow) => {
 
       db.get(`
-      SELECT COUNT(*) as count
-      FROM transactions
-      WHERE actionStatus = 'PENDING'
-      AND agentStatus IS NULL
-    `, (err, agentPendingRow) => {
-
-      db.get(`
         SELECT COUNT(*) as count
         FROM transactions
-        WHERE actionStatus IN ('APPROVED','REJECTED')
-      `, (err, settledRow) => {
+        WHERE actionStatus = 'PENDING'
+        AND agentStatus IS NULL
+      `, (err, agentPendingRow) => {
 
         db.get(`
           SELECT COUNT(*) as count
           FROM transactions
-          WHERE actionStatus = 'APPROVED'
-        `, (err, approvedRow) => {
+          WHERE actionStatus IN ('APPROVED','REJECTED')
+        `, (err, settledRow) => {
 
           db.get(`
             SELECT COUNT(*) as count
             FROM transactions
-            WHERE actionStatus = 'REJECTED'
-          `, (err, rejectedRow) => {
+            WHERE actionStatus = 'APPROVED'
+          `, (err, approvedRow) => {
 
-            // ===== TODAY =====
             db.get(`
               SELECT COUNT(*) as count
               FROM transactions
-              WHERE actionStatus = 'PENDING'
-              AND substr(depositDate,1,10) = ?
-            `, [today], (err, pendingTodayRow) => {
+              WHERE actionStatus = 'REJECTED'
+            `, (err, rejectedRow) => {
 
+              // ===== TODAY =====
               db.get(`
                 SELECT COUNT(*) as count
                 FROM transactions
-                WHERE actionStatus IN ('APPROVED','REJECTED')
+                WHERE actionStatus = 'PENDING'
                 AND substr(depositDate,1,10) = ?
-              `, [today], (err, settledTodayRow) => {
+              `, [today], (err, pendingTodayRow) => {
 
-                // ===== TOTAL AMOUNT =====
                 db.get(`
-                  SELECT SUM(amount) as total
+                  SELECT COUNT(*) as count
                   FROM transactions
-                `, (err, amountRow) => {
+                  WHERE actionStatus IN ('APPROVED','REJECTED')
+                  AND substr(depositDate,1,10) = ?
+                `, [today], (err, settledTodayRow) => {
+
+                  // ===== TOTAL AMOUNT =====
+                  db.get(`
+                    SELECT SUM(amount) as total
+                    FROM transactions
+                  `, (err, amountRow) => {
 
                     // ===== BRAND =====
                     db.all(`
@@ -1960,19 +2358,38 @@ app.get("/api/dashboard", requireAuth, (req, res) => {
                             return diff < 30 * 60 * 1000;
                           }).length;
 
-                          // ===== FINAL RESPONSE =====
-                          res.json({
-                            totalPending: pendingRow.count,
-                            totalSettled: settledRow.count,
-                            approved: approvedRow.count,
-                            rejected: rejectedRow.count,
-                            pendingToday: pendingTodayRow.count,
-                            settledToday: settledTodayRow.count,
-                            totalAmount: amountRow.total || 0,
-                            agentPending: agentPendingRow.count,
-                            brandStats: brandRows,
-                            brandTodayStats: brandTodayRows,
-                            activeUsers
+                          // ===== AGENT ANSWERS =====
+                          db.get(`
+                            SELECT COUNT(*) as count
+                            FROM transactions
+                            WHERE agentStatus = 'RECEIVED'
+                          `, (err, receivedRow) => {
+
+                            db.get(`
+                              SELECT COUNT(*) as count
+                              FROM transactions
+                              WHERE agentStatus = 'NOT RECEIVED'
+                            `, (err, notReceivedRow) => {
+
+                              // ✅ FINAL RESPONSE (ONLY ONCE)
+                              res.json({
+                                totalPending: pendingRow.count,
+                                totalSettled: settledRow.count,
+                                approved: approvedRow.count,
+                                rejected: rejectedRow.count,
+                                pendingToday: pendingTodayRow.count,
+                                settledToday: settledTodayRow.count,
+                                totalAmount: amountRow.total || 0,
+                                agentPending: agentPendingRow.count,
+                                brandStats: brandRows,
+                                brandTodayStats: brandTodayRows,
+                                activeUsers,
+                                received: receivedRow.count,
+                                notReceived: notReceivedRow.count
+                              });
+
+                            });
+
                           });
 
                         });
@@ -1999,6 +2416,7 @@ app.get("/api/dashboard", requireAuth, (req, res) => {
 
   });
 });
+
 /////////////////////Balance & Wallet Monitor//////////////////////
 app.get("/api/wallets/monitor", requireAuth, (req, res) => {
   const {
@@ -2522,6 +2940,42 @@ app.get("/api/export/video", requireAuth, (req, res) => {
 
 });
 
+app.post("/api/video-cases/bulk-delete", requireAdminOrDev, (req, res) => {
+  const { ids } = req.body;
+
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "No valid IDs provided" });
+  }
+
+  const cleanIds = ids.map(id => parseInt(id)).filter(id => !isNaN(id));
+
+  if (cleanIds.length === 0) {
+    return res.status(400).json({ error: "Invalid IDs" });
+  }
+
+  const placeholders = cleanIds.map(() => "?").join(",");
+  const user = req.session?.user?.username || "unknown";
+
+  db.run(
+    `DELETE FROM video_cases WHERE id IN (${placeholders})`,
+    cleanIds,
+    function (err) {
+      if (err) {
+        console.error("❌ VIDEO CASE BULK DELETE ERROR:", err);
+        addLog("ERROR", `Video case delete failed: ${err.message}`, user);
+        return res.json({ success: false });
+      }
+
+      addLog("CRITICAL", `Deleted ${this.changes} video cases`, user);
+
+      res.json({
+        success: true,
+        deleted: this.changes
+      });
+    }
+  );
+});
+
 /////////////////////SMS FUNCTION//////////////////////////
 app.post("/api/import-sms", upload.single("file"), (req, res) => {
   const smsData = [];
@@ -2797,3 +3251,108 @@ app.delete("/api/sms/reset", requireAuth, (req, res) => {
   });
 
 });
+
+//////////////////////////////////////////////////////////////message webhook//////////////////////////////////////
+app.post("/api/message", requireAuth, (req, res) => {
+  const { message, target } = req.body;
+  const sender = req.session.user.username;
+
+  const receiver = target === "ALL" ? "ALL" : target;
+
+  db.run(
+    `
+    INSERT INTO messages (sender, receiver, message)
+    VALUES (?, ?, ?)
+  `,
+    [sender, receiver, message],
+    function (err) {
+      if (err) {
+        return res.status(500).json({ success: false });
+      }
+
+      const payload = {
+        sender,
+        receiver,
+        message,
+        createdAt: new Date()
+      };
+
+      const io = getIO();
+
+      // 📡 SOCKET MESSAGE
+      if (receiver === "ALL") {
+        io.emit("receive-message", payload);
+      } else {
+        io.to(receiver).emit("receive-message", payload);
+      }
+
+      // 🔔 NOTIFICATION (🔥 NEW)
+      createNotification({
+        type: "MESSAGE",
+        title: "New Message",
+        message:
+          receiver === "ALL"
+            ? `${sender} sent a message to ALL`
+            : `${sender} → ${receiver}`,
+        meta: { text: message },
+        target: receiver === "ALL" ? "ALL" : receiver
+      });
+
+      res.json({ success: true });
+    }
+  );
+});
+
+app.get("/api/messages", requireAuth, (req, res) => {
+  const user = req.session.user.username;
+
+  db.all(`
+    SELECT * FROM messages
+    WHERE receiver = 'ALL' OR receiver = ?
+    ORDER BY createdAt DESC
+    LIMIT 100
+  `, [user], (err, rows) => {
+
+    if (err) {
+      return res.status(500).json([]);
+    }
+
+    res.json(rows);
+  });
+});
+
+////////////////////////////////////////////////NOTIFICATION FUNCTION//////////////////////////
+function createNotification({ type, title, message, meta = {}, target = "ALL" }) {
+  const io = getIO();
+
+  db.run(
+    `
+    INSERT INTO notifications (type, title, message, meta)
+    VALUES (?, ?, ?, ?)
+  `,
+    [type, title, message, JSON.stringify(meta)],
+    function (err) {
+      if (err) {
+        console.error("❌ Notification insert failed:", err);
+        return;
+      }
+
+      const payload = {
+        id: this.lastID,
+        type,
+        title,
+        message,
+        meta,
+        target,
+        createdAt: new Date()
+      };
+
+      // 🎯 TARGETING
+      if (target === "ALL") {
+        io.emit("new-notification", payload);
+      } else {
+        io.to(target).emit("new-notification", payload);
+      }
+    }
+  );
+}

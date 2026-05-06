@@ -38,7 +38,7 @@
   left: 0;
   width: 100vw;
   height: 100vh !important;
-  z-index: 9999;
+  z-index: 10000;
   border-radius: 0;
 }
 
@@ -337,9 +337,9 @@ button:disabled {
 .modal {
   display: none;
   position: fixed;
-  z-index: 9999;
+  z-index: 10000;
   inset: 0;
-  background: rgba(15, 23, 42, 0.55); /* dark blur feel */
+  background: rgba(15, 23, 42, 0.55);
   backdrop-filter: blur(4px);
   align-items: center;
   justify-content: center;
@@ -401,10 +401,16 @@ button:disabled {
 
 .btn-secondary {
   background: #e5e7eb;
-  border: none;
+  color: #111;            
+  border: 1px solid #d1d5db;
   padding: 8px 16px;
   border-radius: 8px;
   cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn-secondary:hover {
+  background: #d1d5db;
 }
 
 /* animation */
@@ -522,24 +528,87 @@ button:disabled {
 }
 
 .sidebar {
-  width: 240px;
+  width: 260px;
   background: linear-gradient(180deg, #0f1b2d, #0b1323);
   color: #9ca3af;
   display: flex;
   flex-direction: column;
-  padding: 15px 0;
+  padding: 20px 0;
   border-right: 1px solid rgba(255,255,255,0.05);
+  transition: width 0.3s ease;
+  overflow: hidden;
 }
 
-/* LOGO */
+.sidebar.collapsed {
+  width: 70px;
+}
+
+.sidebar.collapsed .menu-title,
+.sidebar.collapsed .menu-item span {
+  display: none;
+}
+
+.sidebar.collapsed .menu-item {
+  justify-content: center;
+}
+
+/* allow submenu positioning */
+.sidebar.collapsed .menu-section {
+  position: relative;
+}
+
+/* floating submenu */
+.sidebar.collapsed .submenu {
+  position: absolute;
+  left: 70px; /* match collapsed width */
+  top: 0;
+
+  width: 220px;
+  max-height: 300px;
+  overflow-y: auto;
+
+  background: #0f172a;
+  border-radius: 8px;
+  padding: 8px 0;
+
+  box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+
+  display: none; /* default hidden */
+  z-index: 9999;
+}
+
+/* show on hover */
+.sidebar.collapsed .menu-section:hover .submenu {
+  display: block;
+}
+
+.sidebar.collapsed .submenu {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.sidebar.collapsed .submenu::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar.collapsed .submenu::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
 .logo {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+   text-align: center;
 
   margin-bottom: 20px;
   gap: 6px;
+}
+
+.sidebar.collapsed .logo span {
+  display: none;
 }
 
 .logo img {
@@ -549,46 +618,50 @@ button:disabled {
 }
 
 .logo span {
-  font-size: 25px;
+  font-size: 16px;
   font-weight: 600;
   color: #cbd5e1;
+  text-align: center;
+  width: 100%;
 }
 
-/* SECTION TITLE */
 .menu-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #64748b;
-  margin: 16px 20px 6px;
+  font-size: 18px;
+  padding: 14px 20px 6px;
+  color: #6b7280;
+  letter-spacing: 1px;
 }
 
-/* MENU ITEM */
 .menu-item {
-  all: unset;
+  padding: 12px 24px;
+  width: 100%;
+  text-align: left;
+
+  justify-content: flex-start;
+  gap: 4px;
+
+  padding: 12px 20px;
+  font-size: 20px;
+
+  color: #cbd5e1;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+
   display: flex;
   align-items: center;
-  gap: 12px;
 
-  padding: 13px 20px;
-
-  font-size: 16px;   /* 🔥 bigger (was ~14) */
-  font-weight: 500;
-  color: #94a3b8;
-
-  cursor: pointer;
-  transition: all 0.2s ease;
+  transition: 0.2s;
 }
 
-/* HOVER */
 .menu-item:hover {
   background: rgba(255,255,255,0.05);
-  color: #fff;
 }
 
-/* ACTIVE (like your screenshot blue highlight) */
 .menu-item.active {
-  background: linear-gradient(90deg, #1d4ed8, #2563eb);
-  color: white;
+  background: linear-gradient(90deg, rgba(59,130,246,0.3), transparent);
+  border-left: 3px solid #3b82f6;
+  color: #fff;
 }
 
 /* LEFT ACTIVE GLOW */
@@ -596,30 +669,54 @@ button:disabled {
   background: #60a5fa;
 }
 
-/* SUBMENU */
+/* default submenu (expanded sidebar) */
 .submenu {
-  margin-left: 18px;
-  display: none;
-  flex-direction: column;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: all 0.25s ease;
+}
+
+.submenu.show {
+  max-height: 300px;
+  opacity: 1;
 }
 
 .submenu button {
-  all: unset;
-  padding: 9px 14px;
-
-  font-size: 14.5px;  /* 🔥 bigger */
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 14px;
+  font-size: 13px;
+  background: transparent;
+  border: none;
   color: #94a3b8;
-
-  cursor: pointer;
 }
 
 .submenu button:hover {
-  color: #fff;
+  background: rgba(255,255,255,0.05);
+  color: white;
 }
 
 .submenu button.active {
+  background: rgba(59,130,246,0.25);
   color: #fff;
   font-weight: 500;
+}
+
+.menu-item .arrow {
+  float: right;
+  transition: transform 0.2s;
+}
+
+.menu-item.open .arrow {
+  transform: rotate(180deg);
+}
+
+.menu-item.open .menu-arrow {
+  transform: rotate(180deg);
 }
 
 .main-wrapper {
@@ -627,6 +724,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  transition: margin-left 0.3s ease;
 }
 
 #headerBar {
@@ -636,11 +734,73 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 15px;
+  padding: 10px 15px;
   border-bottom: 1px solid #333;
   flex-shrink: 0;
   position: relative;
   z-index: 9999;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
+.header-center {
+  flex: 1;
+  text-align: center;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+#notifDropdown {
+  position: absolute;
+  top: 45px;   /* 👈 push below header */
+  right: 0;
+  width: 260px;
+  background: #1e293b;
+  color: white;
+  border-radius: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 9999;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+
+  opacity: 0;
+  transform: translateY(-10px);
+  pointer-events: none;   /* 👈 important */
+  transition: 0.2s ease;
+}
+
+#notifDropdown.show {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;   /* 👈 enable interaction */
+}
+
+#notifWrapper {
+  position: relative;
+  display: inline-block;
+}
+
+#notifBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: red;
+  color: white;
+  font-size: 10px;
+  padding: 2px 5px;
+  border-radius: 50%;
+  min-width: 16px;
+  text-align: center;
+  line-height: 1;
+  display: none;
+  z-index: 10;
 }
 
 .main-content {
@@ -682,9 +842,20 @@ button:disabled {
 }
 
 .sidebar button {
-  all: unset;
-  display: block;
+  border: none;
+  background: none;
   width: 100%;
+}
+
+.sidebar.hidden {
+  width: 0;
+  padding: 0;
+  border: none;
+  overflow: hidden;
+}
+
+.sidebar.hidden + .main-wrapper {
+  margin-left: 0 !important;
 }
 
 .menu-btn {
@@ -915,6 +1086,217 @@ input:focus, select:focus {
   }
 }
 
+.ref-duplicate {
+  background-color: #ff4d4d !important; /* RED */
+  color: #fff;
+}
+
+.ref-1diff {
+  background-color: #ffa500 !important; /* ORANGE */
+  color: #000;
+}
+
+.ref-2diff {
+  background-color: #fff176 !important; /* YELLOW */
+}
+
+.ref-special {
+  border: 2px solid #ff00ff !important; /* PINK BORDER */
+}
+
+/* ================= CHAT PAGE ================= */
+.chat-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 70px);
+
+  /* 🔥 3D gradient background */
+  background: radial-gradient(circle at top left, #1e293b, #0f172a 60%);
+}
+
+/* ================= HEADER ================= */
+.chat-header-bar {
+  background: linear-gradient(145deg, #0f172a, #111827);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+
+/* ================= FONT CONTROLS ================= */
+.font-controls {
+  position: absolute;
+  right: 16px;
+  top: 8px;
+  display: flex;
+  gap: 6px;
+}
+
+.font-controls button {
+  background: #1e293b;
+  border: none;
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 22px;
+}
+
+.font-controls button:hover {
+  background: #334155;
+}
+
+/* ================= CHAT CONTAINER ================= */
+.chat-container {
+  font-size: 20px;
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  /* 🔥 glass + depth */
+  background: linear-gradient(
+    to bottom,
+    rgba(255,255,255,0.03),
+    rgba(0,0,0,0.2)
+  );
+
+  backdrop-filter: blur(6px);
+  border-radius: 12px;
+  margin: 10px;
+}
+
+/* Scrollbar (optional premium feel) */
+.chat-container::-webkit-scrollbar {
+  width: 6px;
+}
+.chat-container::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 10px;
+}
+
+/* ================= MESSAGE ROW ================= */
+.chat-row {
+  display: flex;
+}
+
+.chat-row.me {
+  justify-content: flex-end;
+}
+
+.chat-row.other {
+  justify-content: flex-start;
+}
+
+/* ================= BUBBLES ================= */
+.chat-bubble {
+  max-width: 65%;
+  padding: 12px 16px;
+  border-radius: 16px;
+  color: #fff;
+
+  /* 🔥 layered depth */
+  background: linear-gradient(145deg, #1e293b, #0f172a);
+
+  box-shadow:
+    0 6px 16px rgba(0,0,0,0.4),
+    inset 0 1px 0 rgba(255,255,255,0.05);
+
+  font-size: var(--chat-font-size, 15px); /* 🔥 slightly bigger */
+}
+.chat-bubble div {
+  font-size: inherit;
+}
+
+.chat-row.me .chat-bubble {
+  background: linear-gradient(145deg, #22c55e, #16a34a);
+
+  box-shadow:
+    0 6px 18px rgba(34,197,94,0.4),
+    inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+/* ================= META ================= */
+.chat-meta {
+  font-size: calc(var(--chat-font-size, 14px) - 3px);
+  opacity: 0.6;
+  margin-bottom: 4px;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* ================= INPUT ================= */
+.chat-input-bar {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+
+  background: rgba(17,24,39,0.8);
+  backdrop-filter: blur(10px);
+
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+.chat-input-bar input {
+  background: #0f172a;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.4);
+}
+
+.chat-input-bar input {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: none;
+  outline: none;
+  background: #1e293b;
+  color: #fff;
+}
+
+.send-btn {
+  background: #22c55e;
+  border: none;
+  padding: 0 16px;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+}
+
+.send-btn:hover {
+  background: #16a34a;
+}
+
+/* ================= GENERAL UI ================= */
+.page-section {
+  padding: 16px;
+}
+
+.page-header {
+  margin-bottom: 12px;
+}
+
+.card {
+  background: #111827;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.table {
+  margin-bottom: 0;
+}
+
+/* ================= ANIMATION ================= */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
 </style>
 
@@ -928,55 +1310,97 @@ input:focus, select:focus {
   <div class="app-container">
 
     <!-- SIDEBAR -->
-    <div class="sidebar">
+    <div id="sidebar" class="sidebar">
 
   <div class="logo">
   <img src="logo.png" alt="Logo">
   <span>ESS PANEL</span>
 </div>
 
-  <div class="menu-section">
-    <div class="menu-title">Dashboard</div>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 
-    <button class="menu-item active" onclick="showPage(event, 'dashboard')">
-  <span>📊</span> Dashboard
-</button>
+<div class="menu-section">
+  <button class="menu-item active" onclick="showPage(event, 'dashboard')">
+    <i class="bi bi-speedometer2 menu-icon"></i>
+    <span>Dashboard</span>
+  </button>
+</div>
+
+<div class="menu-section">
+  <div class="menu-title">Transactions</div>
+
+  <button class="menu-item" onclick="toggleMenu('depositMenu')">
+    <i class="bi bi-cash-stack menu-icon"></i>
+    <span>Deposits</span>
+    <i class="bi bi-chevron-down menu-arrow"></i>
+  </button>
+
+  <div id="depositMenu" class="submenu">
+    <button onclick="showPage(event, 'pending')">
+      <i class="bi bi-hourglass-split"></i> Pending Deposits
+    </button>
+    <button onclick="showPage(event, 'settled')">
+      <i class="bi bi-check-circle"></i> Settled Deposits
+    </button>
+    <button onclick="showPage(event, 'video')">
+      <i class="bi bi-camera-video"></i> Video Case
+    </button>
+    <button onclick="showPage(event, 'videoSettled')">
+      <i class="bi bi-check2-square"></i> Settled Video
+    </button>
+    <button onclick="showPage(event, 'sms')">
+      <i class="bi bi-chat-dots"></i> SMS
+    </button>
   </div>
+</div>
 
-  
+<div class="menu-section">
+  <div class="menu-title">Operations</div>
 
-  <div class="menu-section">
-    <div class="menu-title">Transactions</div>
+  <button class="menu-item" onclick="showPage(event, 'chat')">
+    <i class="bi bi-chat-left-text menu-icon"></i>
+    <span>Chat ID</span>
+  </button>
 
-    <button class="menu-item" onclick="toggleMenu('depositMenu')">
-  <span>💰</span> Deposits ▾
-</button>
+  <button class="menu-item" onclick="showPage(event, 'balance')">
+    <i class="bi bi-wallet2 menu-icon"></i>
+    <span>Balance</span>
+  </button>
 
-    <div id="depositMenu" class="submenu">
-      <button onclick="showPage(event, 'pending')">Pending Deposits</button>
-      <button onclick="showPage(event, 'settled')">Settled Deposits</button>
-      <button onclick="showPage(event, 'video')">🎥 Video Case</button>
-      <button onclick="showPage(event, 'videoSettled')">🎥 Settled Video</button>
-      <button class="menu-item" onclick="showPage(event, 'sms')">📩 SMS</button>
-    </div>
-  </div>
+  <button class="menu-item" onclick="showPage(event, 'wallet')">
+    <i class="bi bi-credit-card menu-icon"></i>
+    <span>Wallet</span>
+  </button>
 
-  <div class="menu-section">
-    <div class="menu-title">Operations</div>
+  <button class="menu-item" onclick="showPage(event, 'walletHealth')">
+    <i class="bi bi-heart-pulse menu-icon"></i>
+    <span>Wallet Health</span>
+  </button>
 
-    <button class="menu-item" onclick="showPage(event, 'chat')">💬 Chat ID</button>
-    <button class="menu-item" onclick="showPage(event, 'balance')">💰 Balance</button>
-    <button class="menu-item" onclick="showPage(event, 'wallet')">💼 Wallet</button>
-    <button class="menu-item" onclick="showPage(event, 'walletHealth')">🩺 Wallet Health</button>
-    <button class="menu-item" onclick="showPage(event, 'groups')">👥 Groups</button>
-  </div>
+  <button class="menu-item" onclick="showPage(event, 'groups')">
+    <i class="bi bi-people menu-icon"></i>
+    <span>Groups</span>
+  </button>
+</div>
 
-  <div class="menu-section">
-    <div class="menu-title">System</div>
+<div class="menu-section">
+  <div class="menu-title">System</div>
 
-    <button class="menu-item" onclick="showPage(event, 'users')">👤 Users</button>
-    <button class="menu-item" onclick="showPage(event, 'settings')">⚙ Settings</button>
-  </div>
+  <button class="menu-item" onclick="showPage(event, 'users')">
+    <i class="bi bi-person menu-icon"></i>
+    <span>Users</span>
+  </button>
+
+  <button class="menu-item" onclick="showPage(event, 'messages')">
+    <i class="bi bi-chat-left-dots menu-icon"></i>
+    <span>Messages</span>
+  </button>
+
+  <button class="menu-item" onclick="showPage(event, 'settings')">
+    <i class="bi bi-gear menu-icon"></i>
+    <span>Settings</span>
+  </button>
+</div>
 
 </div>
 
@@ -986,41 +1410,66 @@ input:focus, select:focus {
       <!-- HEADER -->
       <div id="headerBar">
 
-        <div>
-          <b><V1 class="0 1"></V1></b>
-        </div>
+  <!-- LEFT -->
+  <div class="header-left">
+    <button onclick="toggleSidebar()" class="btn btn-sm btn-outline-light">
+      ☰
+    </button>
+  </div>
 
-        <div style="display:flex; align-items:center; gap:15px;">
+  <!-- CENTER -->
+  <div class="header-center">
+    <b>ESS Control Center</b>
+  </div>
 
-          <span id="timeNow"></span>
-          <span id="userInfo"></span>
+  <!-- RIGHT -->
+  <div class="header-right">
 
-          <!-- OPTIONS -->
-          <div class="options-wrapper">
-  <button onclick="toggleOptions(event)" class="btn-options">
-  ⚙ Options
-</button>
+    <span id="timeNow"></span>
+    <span id="userInfo"></span>
 
-  <div id="optionsMenu" class="options-menu">
-    <div onclick="alert('Coming soon')">Profile</div>
-    <div onclick="alert('Coming soon')">Preferences</div>
+    <!-- 🔔 NOTIFICATION -->
+    <div id="notifWrapper" style="position:relative;">
+
+      <button onclick="toggleNotifDropdown()" class="btn btn-dark btn-sm" title="Notifications">
+        🔔
+      </button>
+
+      <span id="notifBadge">0</span>
+
+      <div id="notifDropdown">
+        <div id="notifList"></div>
+      </div>
+
+    </div>
+
+    <!-- ⚙ OPTIONS -->
+    <div class="options-wrapper">
+      <button onclick="toggleOptions(event)" class="btn-options">
+        ⚙
+      </button>
+
+      <div id="optionsMenu" class="options-menu">
+        <div>Profile</div>
+        <div>Preferences</div>
+      </div>
+    </div>
+
+    <!-- ACTIONS -->
+    <button onclick="openChangePasswordModal()" class="btn btn-warning btn-sm">
+      🔑
+    </button>
+
+    <button id="createUserBtn" onclick="openCreateUserModal()" class="btn btn-success btn-sm">
+      ➕
+    </button>
+
+    <button onclick="logout()" class="btn btn-danger btn-sm">
+      Logout
+    </button>
+
   </div>
 </div>
-
-          <button onclick="openChangePasswordModal()" class="btn btn-warning btn-sm">
-            🔑 Change Password
-          </button>
-
-          <button id="createUserBtn" onclick="openCreateUserModal()" class="btn btn-success btn-sm">
-            ➕ Create Account
-          </button>
-
-          <button onclick="logout()" class="btn btn-danger btn-sm">
-            Logout
-          </button>
-
-        </div>
-      </div>
 
       <!-- MAIN CONTENT -->
       <div class="main-content">
@@ -1073,6 +1522,16 @@ input:focus, select:focus {
       <div class="card-title">Active Users</div>
       <div class="card-value" id="statUsers">0</div>
     </div>
+
+    <div class="card-box">
+  <div class="card-title">Agent Answer (Received)</div>
+  <div class="card-value" id="statReceived">0</div>
+</div>
+
+<div class="card-box">
+  <div class="card-title">Agent Answer (Not Received)</div>
+  <div class="card-value" id="statNotReceived">0</div>
+</div>
 
   </div>
 
@@ -1211,6 +1670,7 @@ input:focus, select:focus {
     <button id="rematchBtn" onclick="rematchSMS()" class="btn btn-warning btn-sm">🔄 Re-match</button>
     <button onclick="cleanEmpty()" class="btn btn-danger btn-sm">🧹 Clean Empty Rows</button>
     <button onclick="bulkReject()" class="btn btn-danger btn-sm">❌ Reject Selected</button>
+    <button onclick="bulkDelete()" class="btn btn-dark btn-sm">🗑️ Delete Selected</button>
     <button onclick="openExportModal()" class="btn btn-success btn-sm">⬇ Export Pending</button>
   </div>
 </div>
@@ -1422,6 +1882,7 @@ input:focus, select:focus {
     <div class="right-actions">
       <button id="videoBulkSendBtn" class="btn btn-primary btn-sm">📤 Send Selected</button>
       <button onclick="assignVideoAndSend()" class="btn btn-warning btn-sm">👥 Assign + Send</button>
+      <button onclick="bulkDeleteVideoCases()" class="btn btn-dark btn-sm">🗑️ Delete Selected</button>
       <button onclick="exportVideoCSV()" class="btn btn-success">⬇ Export CSV</button>
     </div>
 
@@ -1869,6 +2330,29 @@ input:focus, select:focus {
     <tbody id="groupsTable"></tbody>
   </table>
 </div>
+
+        <!-- ================= MESSAGES ================= -->
+<div id="messagesPage" class="chat-page" style="display:none;">
+
+  <div class="chat-header-bar">
+    <span>💬 Messages</span>
+
+    <!-- 🔥 Font Controls -->
+    <div class="font-controls">
+      <button onclick="changeFont(-1)">A-</button>
+      <button onclick="resetFont()">A</button>
+      <button onclick="changeFont(1)">A+</button>
+    </div>
+  </div>
+
+  <div id="messagesContainer" class="chat-container"></div>
+
+  <div class="chat-input-bar">
+    <input id="chatInput" type="text" placeholder="Type a message..." />
+    <button onclick="sendMessage()" class="send-btn">➤</button>
+  </div>
+</div>
+
         <div id="settingsPage">
   <h3>Settings</h3>
 
@@ -2011,8 +2495,15 @@ async function checkUser() {
 
   currentUser = user;
 
+  if (socket && socket.connected) {
+  socket.emit("register", currentUser);
+  console.log("👤 registered after checkUser:", currentUser.username);
+}
+
   // ✅ APPLY ROLE UI
   applyRoleUI(currentUser);
+
+  console.log("🔥 User loaded:", user.username);
 
   // ✅ USER INFO
   const userInfo = document.getElementById("userInfo");
@@ -2051,6 +2542,28 @@ async function logout() {
   await fetch("/api/logout", { method: "POST" });
   window.location.href = "/login.html";
 }
+
+async function safeFetch(url, options = {}) {
+  try {
+    const res = await fetch(url, {
+      ...options,
+      credentials: "include" // 🔥 keep session
+    });
+
+    if (res.status === 401) {
+      alert("⚠️ Session expired. Please login again.");
+      window.location.href = "/login.html";
+      return null;
+    }
+
+    return res;
+
+  } catch (err) {
+    console.error("❌ safeFetch error:", err);
+    throw err; // let update() catch it
+  }
+}
+
 //////////////////////Reset Transactions (Dev Option)//////////////////////
 async function resetTransactions() {
   if (!confirm("Are you sure? This will delete ALL pending deposits.")) return;
@@ -2064,15 +2577,15 @@ async function resetTransactions() {
     const data = await res.json();
 
     if (data.success) {
-      showToast("🧹 Transactions reset");
+      showToast("Transactions reset", "success");
       allData = [];
       await load();
     } else {
-      showToast("❌ Reset failed", false);
+      showToast("Reset failed", "error");
     }
 
   } catch (err) {
-    showToast("❌ Reset failed", false);
+    showToast("Reset failed", "error");
   }
 }
 
@@ -2085,7 +2598,7 @@ async function resetVideoCases() {
   if (!confirmReset) return;
 
   isResetting = true;
-  showToast("🔄 Resetting video cases...");
+  showToast("Resetting video cases...", "info");
 
   try {
     const res = await fetch("/api/reset-video-cases", {
@@ -2096,15 +2609,15 @@ async function resetVideoCases() {
     const data = await res.json();
 
     if (data.success) {
-      showToast("🧹 Video cases reset successfully");
+      showToast("🧹 Video cases reset successfully", "success");
       await loadVideoCases();
     } else {
-      showToast("❌ Reset failed", false);
+      showToast("Reset failed", "error");
     }
 
   } catch (err) {
     console.error(err);
-    showToast("❌ Error resetting video cases", false);
+    showToast("❌ Error resetting video cases", "error");
   }
 
   isResetting = false;
@@ -2149,18 +2662,18 @@ if (reconcileBtn) {
       const data = await res.json();
 
       if (data.success) {
-        showToast(`✅ Fixed: ${data.fixed}, Inserted: ${data.inserted}`);
+        showToast(`Fixed: ${data.fixed}, Inserted: ${data.inserted}`, "success");
         await load();
 
         // 🔥 scroll after action
         window.scrollTo({ top: 0, behavior: "smooth" });
 
       } else {
-        showToast("❌ Failed");
+        showToast("Failed to reconcile data", "error");
       }
 
     } catch (err) {
-      showToast("❌ Error");
+      showToast("Error occurred while reconciling data", "error");
     }
 
     reconcileBtn.disabled = false;
@@ -2173,6 +2686,8 @@ if (reconcileBtn) {
 
 <script>
 let allData = [];
+let allDataFull = [];
+let isFullLoaded = false;
 let isLoading = false;
 let currentPage = 1;
 const rowsPerPage = 20;
@@ -2200,9 +2715,17 @@ let currentRef = null;
 let smsPage = 1;
 let smsTotalPages = 1;
 let walletNeedsReset = true;
+let filtersInitialized = false;
 
 /////////////////Socket//////////////////////////
 const socket = io();
+
+socket.on("connect", () => {
+  if (currentUser?.username) {
+    socket.emit("register", currentUser);
+    console.log("👤 socket registered:", currentUser.username);
+  }
+});
 
 socket.on("update", (data) => {
   console.log("🔄 REALTIME UPDATE:", data);
@@ -2268,10 +2791,7 @@ socket.on("ref-users", ({ ref, users }) => {
 
 window.addEventListener("beforeunload", () => {
   if (currentRef) {
-    socket.emit("leave-ref", {
-      ref: currentRef,
-      user: currentUser
-    });
+    socket.emit("leave-ref", { ref: currentRef });
   }
 });
 
@@ -2360,38 +2880,49 @@ socket.on("rematch-status", async (data) => {
 //////////////////////////////////////////////////////
 function toggleMenu(id) {
   const menu = document.getElementById(id);
+  const parentBtn = menu.previousElementSibling;
 
-  if (menu.style.display === "flex") {
-    menu.style.opacity = "0";
-    setTimeout(() => {
-      menu.style.display = "none";
-    }, 200);
-  } else {
-    menu.style.display = "flex";
-    setTimeout(() => {
-      menu.style.opacity = "1";
-    }, 10);
-  }
+  document.querySelectorAll(".submenu").forEach(m => {
+    if (m !== menu) {
+      m.classList.remove("show");
+      m.previousElementSibling?.classList.remove("open");
+    }
+  });
+
+  menu.classList.toggle("show");
+  parentBtn.classList.toggle("open");
 }
 
 // SWITCH PAGE
 function showPage(event, page) {
+
   // remove ALL active
-  document.querySelectorAll(".menu-item").forEach(btn =>
+  document.querySelectorAll(".menu-item, .submenu button").forEach(btn =>
     btn.classList.remove("active")
   );
 
-  let target = event.target;
+  // 🔥 SAFE CHECK
+  let target = event ? event.currentTarget : null;
 
-  // 🔥 if submenu clicked → find parent menu-item
-  if (!target.classList.contains("menu-item")) {
-    target = target.closest(".menu-section").querySelector(".menu-item");
+  if (target) {
+    // submenu logic
+    if (target.closest(".submenu")) {
+      target.classList.add("active");
+
+      const parent = target.closest(".menu-section").querySelector(".menu-item");
+      if (parent) parent.classList.add("active");
+    } else {
+      target.classList.add("active");
+    }
+  } else {
+    // 🔥 DEFAULT ACTIVE (Dashboard button)
+    const dashboardBtn = document.querySelector(
+      ".menu-item[onclick*=\"dashboard\"]"
+    );
+    if (dashboardBtn) dashboardBtn.classList.add("active");
   }
 
-  // set active ONLY on correct menu
-  target.classList.add("active");
-
-  // page switching
+  // page switching (unchanged)
   document.getElementById("dashboardPage").style.display = page === "dashboard" ? "block" : "none";
   document.getElementById("pendingPage").style.display = page === "pending" ? "block" : "none";
   document.getElementById("chatPage").style.display = page === "chat" ? "block" : "none";
@@ -2401,6 +2932,7 @@ function showPage(event, page) {
   document.getElementById("settledPage").style.display = page === "settled" ? "block" : "none";
   document.getElementById("settingsPage").style.display = page === "settings" ? "block" : "none";
   document.getElementById("usersPage").style.display = page === "users" ? "block" : "none";
+  document.getElementById("messagesPage").style.display = page === "messages" ? "block" : "none";
   document.getElementById("videoPage").style.display = page === "video" ? "block" : "none";
   document.getElementById("videoSettledPage").style.display = page === "videoSettled" ? "block" : "none";
   document.getElementById("smsPage").style.display = page === "sms" ? "block" : "none";
@@ -2413,6 +2945,7 @@ function showPage(event, page) {
   if (page === "groups") loadGroups();
   if (page === "settled") {initSettledListeners();loadSettled();}
   if (page === "settings") {loadSettings();loadLogs();}
+  if (page === "messages") loadMessages();
   if (page === "users") loadUsers();
   if (page === "pending") load();
   if (page === "video") loadVideoCases();
@@ -2421,12 +2954,18 @@ function showPage(event, page) {
 }
 
 async function init() {
+  await checkUser();
+
   await Promise.all([
+    loadBrands(),
     loadEssStatus(),
-    loadAgentPrefixes(),
-    load()
+    loadAgentPrefixes()
   ]);
+
+  await load();
+  await loadDashboard();
 }
+
 async function loadSettings() {
   const res = await fetch("/api/settings", {
     credentials: "include"
@@ -2760,7 +3299,7 @@ function getFilteredOverviewData() {
 
 
 
-///////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////Pending Deposits - Load Groups for Chat ID Copy/Use
 async function loadGroups() {
   const res = await fetch("/api/groups", {
     credentials: "include"
@@ -2789,7 +3328,6 @@ async function loadGroups() {
   });
 }
 
-// LOAD TABLE
 async function load() {
   if (isLoading) return;
   isLoading = true;
@@ -2806,14 +3344,13 @@ async function load() {
     params.append("sent", document.getElementById("sentFilter")?.value || "");
     params.append("smsMatched", document.getElementById("smsFilter")?.value || "");
 
-    console.log("🔍 QUERY:", params.toString()); // 👈 debug
-
     const res = await fetch(`/api/transactions?${params}`, {
       credentials: "include"
     });
 
     const data = await res.json();
 
+    // ✅ display data
     allData = data.data;
     totalPages = data.totalPages || 1;
 
@@ -2836,23 +3373,6 @@ async function load() {
     load();
   });
 });
-
-function populateBrandFilter() {
-  const select = document.getElementById("brandFilter");
-
-  // reset
-  select.innerHTML = `<option value="">All Brands</option>`;
-
-  // get unique brands
-  const brands = [...new Set(allData.map(t => t.brand).filter(Boolean))];
-
-  brands.forEach(b => {
-    const opt = document.createElement("option");
-    opt.value = b;
-    opt.textContent = b;
-    select.appendChild(opt);
-  });
-}
 
 async function loadAgentPrefixes() {
   const res = await fetch("/api/agent-prefix", {
@@ -2892,7 +3412,7 @@ async function bulkReject() {
   const selected = Array.from(selectedIds);
 
   if (selected.length === 0) {
-    showToast("⚠️ No rows selected", "warning");
+    showToast("No rows selected", "warning");
     return;
   }
 
@@ -2903,6 +3423,7 @@ async function bulkReject() {
   if (!confirmed) return;
 
   try {
+    // 🔄 loading toast
     showToast("Processing rejection...", "info");
 
     await fetch("/api/transactions/bulk-reject", {
@@ -2912,15 +3433,59 @@ async function bulkReject() {
       credentials: "include"
     });
 
+    // 🔥 remove loading toast
+    document.querySelectorAll(".premium-toast.info").forEach(t => t.remove());
+
     selectedIds.clear();
     document.getElementById("selectAll").checked = false;
 
     await load();
 
-    showToast(`✔ ${selected.length} transactions rejected`, "success");
+    showToast(`${selected.length} transactions rejected`, "success");
 
   } catch (err) {
+    document.querySelectorAll(".premium-toast.info").forEach(t => t.remove());
+
     showToast("Bulk reject failed", "error");
+    console.error(err);
+  }
+}
+
+async function bulkDelete() {
+  const selected = Array.from(selectedIds);
+
+  if (selected.length === 0) {
+    showToast("No rows selected", "warning");
+    return;
+  }
+
+  const confirmed = await showConfirmModal(
+    `⚠️ Permanently delete ${selected.length} transactions?\nThis cannot be undone.`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    showToast("Deleting transactions...", "info");
+
+    const res = await fetch("/api/transactions/bulk-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: selected }),
+      credentials: "include"
+    });
+
+    const data = await res.json();
+
+    selectedIds.clear();
+    document.getElementById("selectAll").checked = false;
+
+    await load();
+
+    showToast(`🗑️ ${data.deleted || 0} transactions deleted`, "success");
+
+  } catch (err) {
+    showToast("Bulk delete failed", "error");
     console.error(err);
   }
 }
@@ -2931,7 +3496,7 @@ if (bulkSendBtn) {
   bulkSendBtn.onclick = async () => {
 
     if (selectedIds.size === 0) {
-      showToast("⚠️ No rows selected", "warning");
+      showToast("No rows selected", "warning");
       return;
     }
 
@@ -3021,11 +3586,11 @@ async function runSync(mode) {
       await load();
 
     } else {
-      showToast("❌ " + (data.error || "Sync failed"), false);
+      showToast("❌ " + (data.error || "Sync failed"), "error");
     }
 
   } catch (err) {
-    showToast("❌ Error syncing", false);
+    showToast("❌ Error syncing", "error");
   }
 }
 
@@ -3076,7 +3641,7 @@ async function sendTG(id) {
       }
 
     } else {
-      showToast(data.message || "❌ Failed", false);
+      showToast(data.message || "❌ Failed", "error");
 
       if (row) {
         row.sent = 0;
@@ -3088,7 +3653,7 @@ async function sendTG(id) {
 
   } catch (err) {
     console.error(err);
-    showToast("❌ Error sending", false);
+    showToast("❌ Error sending", "error");
   }
 }
 
@@ -3119,7 +3684,7 @@ async function resendTG(id) {
       }
 
     } else {
-      showToast(data.message || "❌ Failed", false);
+      showToast(data.message || "❌ Failed", "error");
 
       if (row) {
         row.sent = 0;
@@ -3131,28 +3696,65 @@ async function resendTG(id) {
 
   } catch (err) {
     console.error(err);
-    showToast("❌ Error resending", false);
+    showToast("❌ Error resending", "error");
   }
 }
 
 // UPDATE
-async function update(ref, brand, status) {
-  const reason = prompt("Enter reason:");
-  if (!currentUser) return;
+async function update(ref, brand, status, reason = null) {
+  if (!currentUser) {
+    showToast("No user session", "error");
+    return;
+  }
 
-  await fetch("/api/update", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ 
-      ref, 
-      brand, 
-      status,
-      reason,
-      username: currentUser.username
-    })
-  });
-  allData = [];
-  load();
+  if ((status === "APPROVED" || status === "REJECTED") && reason === null) {
+    reason = prompt("Enter reason:");
+    if (reason === null) return;
+  }
+
+  console.log("🔥 Sending update:", { ref, brand, status, reason });
+
+  try {
+    const res = await safeFetch("/api/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ref,
+        brand,
+        status,
+        reason,
+        username: currentUser.username
+      })
+    });
+
+    if (!res) return; // session expired handled in safeFetch
+
+    const data = await res.json();
+
+    console.log("✅ Response:", data);
+
+    if (!res.ok || !data.success) {
+      showToast(data.message || "Update failed", "error");
+      return;
+    }
+
+    // ✅ SUCCESS → toast instead of alert
+    showToast("Updated successfully", "success");
+
+    allData = [];
+    load();
+
+  } catch (err) {
+    console.error("❌ FETCH ERROR:", err);
+    showToast("Network error", "error");
+  }
+}
+
+async function approveWithReason(ref, brand) {
+  const reason = prompt("Enter reason:");
+  if (reason === null) return;
+
+  await update(ref, brand, "APPROVED", reason);
 }
 
 // CHAT
@@ -3184,7 +3786,7 @@ async function saveChat() {
 
   } catch (err) {
     console.error(err);
-    showToast("Error saving data", false);
+    showToast("Error saving data", "error");
   }
 }
 
@@ -3244,7 +3846,7 @@ async function uploadChatBulk() {
     showToast("Bulk upload success");
     loadChat(); // refresh table
   } else {
-    showToast("Upload failed", false);
+    showToast("Upload failed", "error");
   }
 }
 
@@ -3434,7 +4036,7 @@ async function deleteChat(id) {
     showToast("Deleted");
     loadChat();
   } else {
-    showToast("Failed to delete", false);
+    showToast("Failed to delete", "error");
   }
 }
 
@@ -3446,6 +4048,142 @@ function formatDate(dateStr) {
   if (!dateStr) return "-";
   const d = new Date(dateStr);
   return d.toLocaleString();
+}
+
+function analyzeRefs(data) {
+  const normalized = data.map(d => ({
+    ...d,
+    _ref: (d.transactionReference || "").toUpperCase().trim(),
+    _flag: null
+  }));
+
+  for (let i = 0; i < normalized.length; i++) {
+    for (let j = i + 1; j < normalized.length; j++) {
+      const a = normalized[i];
+      const b = normalized[j];
+
+      if (!a._ref || !b._ref) continue;
+
+      if (a._ref === b._ref) {
+        a._flag = b._flag = "duplicate";
+      } else {
+        const diff = countDiff(a._ref, b._ref);
+
+        if (diff === 1 && a._flag !== "duplicate") {
+          a._flag = b._flag = "1diff";
+        } else if (diff === 2 && a._flag !== "duplicate") {
+          a._flag = b._flag = "2diff";
+        }
+      }
+    }
+  }
+
+  // special char
+  normalized.forEach(d => {
+    if (/[^A-Z0-9]/.test(d._ref)) {
+      d._flag = "special";
+    }
+  });
+
+  return normalized;
+}
+
+function getRefClass(t) {
+  switch (t._flag) {
+    case "duplicate": return "ref-duplicate";
+    case "1diff": return "ref-1diff";
+    case "2diff": return "ref-2diff";
+    case "special": return "ref-special";
+    default: return "";
+  }
+}
+
+//////////////////////////////////////////Highlight duplicate and similar refs in dashboard//////////////////////////////////////////
+function highlightRefs() {
+  const rows = document.querySelectorAll("#tbody tr");
+
+  // 🔥 build frequency map FIRST
+  const refCount = {};
+
+  allDataFull.forEach(item => {
+    const ref = normalizeRef(item.transactionReference);
+    if (!ref) return;
+    refCount[ref] = (refCount[ref] || 0) + 1;
+  });
+
+  rows.forEach(row => {
+    const cell = row.querySelector(".copyable");
+    if (!cell) return;
+
+    const ref = normalizeRef(cell.innerText);
+    if (!ref) return;
+
+    let flag = null;
+
+    // ✅ FIXED: detect duplicate properly
+    if (refCount[ref] > 1) {
+      flag = "duplicate";
+    } else {
+      // only check diff if not duplicate
+      for (let other in refCount) {
+        if (other === ref) continue;
+
+        const diff = countDiff(ref, other);
+
+        if (diff === 1) flag = flag || "1diff";
+        else if (diff === 2) flag = flag || "2diff";
+      }
+    }
+
+    // apply styles
+    if (flag === "duplicate") cell.classList.add("ref-duplicate");
+    else if (flag === "1diff") cell.classList.add("ref-1diff");
+    else if (flag === "2diff") cell.classList.add("ref-2diff");
+
+    if (/[^A-Z0-9]/.test(ref)) {
+      cell.classList.add("ref-special");
+    }
+  });
+}
+
+function populatePendingFilters(data) {
+  const essSelect = document.getElementById("essStatusFilter");
+  const brandSelect = document.getElementById("brandFilter");
+  const agentSelect = document.getElementById("agentPrefixFilter");
+
+  // 🧠 keep current values
+  const currentEss = essSelect.value;
+  const currentBrand = brandSelect.value;
+  const currentAgent = agentSelect.value;
+
+  const essSet = new Set();
+  const brandSet = new Set();
+  const agentSet = new Set();
+
+  data.forEach(r => {
+    if (r.essStatus) essSet.add(r.essStatus);
+    if (r.brand) brandSet.add(r.brand);
+
+    if (r.agentName) {
+      const parts = r.agentName.split("-");
+      const prefix = parts.length >= 2 
+      ? `${parts[0]}-${parts[1]}`
+      : r.agentName;
+      agentSet.add(prefix);
+    }
+  });
+
+  // ESS
+  essSelect.innerHTML = `<option value="">All ESS</option>`;
+  essSet.forEach(v => {
+    essSelect.innerHTML += `<option value="${v}">${v}</option>`;
+  });
+
+  // restore
+  essSelect.value = currentEss;
+
+  // OPTIONAL (if you want full sync)
+  // same for brand + agent
 }
 
 function renderTable() {
@@ -3496,12 +4234,22 @@ function renderTable() {
           : ""
         }
 
-        <button onclick="claimRef('${t.transactionReference}')" 
-          class="btn btn-warning btn-sm px-2 py-1">🧠</button>
+        <button 
+  onclick='event.stopPropagation(); claimRef(${JSON.stringify(t.transactionReference)})'
+  class="btn btn-warning btn-sm px-2 py-1">
+  🧠
+</button>
 
-        <button onclick="update('${t.transactionReference}','${t.brand}','RECEIVED')" class="btn btn-success btn-sm px-2 py-1">✔</button>
-        <button onclick="update('${t.transactionReference}','${t.brand}','NOT RECEIVED')" class="btn btn-danger btn-sm px-2 py-1">✖</button>
-
+        <button 
+  onclick='event.stopPropagation(); approveWithReason(${JSON.stringify(t.transactionReference)}, ${JSON.stringify(t.brand)})'
+  class="btn btn-success btn-sm px-2 py-1">
+  ✔
+</button>
+        <button 
+  onclick='event.stopPropagation(); update(${JSON.stringify(t.transactionReference)}, ${JSON.stringify(t.brand)}, "REJECTED")'
+  class="btn btn-danger btn-sm px-2 py-1">
+  ✖
+</button>
         ${editBtn}
       `;
     }
@@ -3509,7 +4257,7 @@ function renderTable() {
     html += `
   <tr 
     data-id="${t.id}"
-    onclick="focusRef('${t.transactionReference}', this)"
+    onclick="focusRef('${t.transactionReference || ''}', this)"
     class="
       ${selectedIds.has(String(t.id)) ? 'table-warning' : ''}
       ${activeRowId == t.id ? 'active-row' : ''}
@@ -3517,12 +4265,12 @@ function renderTable() {
   >
         <td>
           <input type="checkbox" class="rowCheck" value="${t.id}" 
-            ${selectedIds.has(String(t.id)) ? "checked" : ""}>
+            ${selectedIds.has(String(t.id)) ? "checked" : ""}></td>
         <td>
           <span class="badge bg-dark">${t.brand || '-'}</span></td>
         <td>${t.agentName}</td>
         <td>${t.depositId}</td>
-        <td class="copyable">${t.transactionReference}</td>
+        <td class="copyable ${getRefClass(t)}">${t.transactionReference}</td>
         <td>${t.customerNumber}</td>
         <td>${t.amount}</td>
         <td>${t.depositDate}</td>
@@ -3544,7 +4292,7 @@ function renderTable() {
         <td>${t.smsMatched ?'<span class="badge bg-success">MATCHED</span>' :'<span class="badge bg-secondary">NONE</span>'}</td>
 
         <td>
-          <div class="action-buttons">
+          <div class="action-buttons" onclick="event.stopPropagation()">
             ${actionButtons}
           </div>
         </td>
@@ -3569,6 +4317,7 @@ function renderTable() {
 
   // ✅ Render pagination ONCE
   renderPagination();
+  highlightRefs();
 
 console.log("✅ renderTable finished");
 
@@ -3584,22 +4333,8 @@ setTimeout(() => {
 }
 
 function onRowClick(ref) {
-  socket.emit("focus-ref", {
-    ref,
-    user: currentUser
-  });
+  socket.emit("focus-ref", { ref });
 }
-
-document.getElementById("search").addEventListener("input", (e) => {
-  const ref = e.target.value.trim();
-
-  if (ref.length > 5) {
-    socket.emit("focus-ref", {
-      ref,
-      user: currentUser
-    });
-  }
-});
 
 function claimRef(ref) {
   socket.emit("claim-ref", {
@@ -3610,14 +4345,14 @@ function claimRef(ref) {
 
 function focusRef(ref, rowEl) {
 
+  if (currentRef === ref) return; // 🔥 avoid duplicate
+
   const rowId = rowEl.dataset.id;
 
-  // leave previous
   if (currentRef && currentRef !== ref) {
-    socket.emit("leave-ref", {
-      ref: currentRef,
-      user: currentUser
-    });
+    if (socket.connected) {
+      socket.emit("leave-ref", { ref: currentRef });
+    }
   }
 
   currentRef = ref;
@@ -3629,10 +4364,9 @@ function focusRef(ref, rowEl) {
 
   rowEl.classList.add("active-row");
 
-  socket.emit("focus-ref", {
-    ref,
-    user: currentUser
-  });
+  if (socket.connected && currentUser) {
+    socket.emit("focus-ref", { ref });
+  }
 }
 
 function showClaimPopup(ref, user) {
@@ -4057,7 +4791,7 @@ let currentSortField = "";
 let currentSortOrder = "desc";
 
 function initSettledListeners() {
-  if (settledListenersInitialized) return; // ✅ prevent duplicate listeners
+  if (settledListenersInitialized) return; 
 
   [
     "settledStatus",
@@ -4372,7 +5106,7 @@ async function saveSettings() {
   if (result.success) {
     showToast("Settings saved");
   } else {
-    showToast("Failed to save", false);
+    showToast("Failed to save", "error");
   }
 }
 
@@ -4445,7 +5179,7 @@ async function saveLogSettings() {
   });
 
   const data = await res.json();
-  showToast(data.message || "Saved");
+  showToast(data.message || "Saved", data.success ? "success" : "error");
 }
 
 async function sendLogsToTelegram() {
@@ -4454,7 +5188,7 @@ async function sendLogsToTelegram() {
   const password = document.getElementById("accessPassword")?.value;
 
   if (!password) {
-    showToast("Enter password first", false);
+    showToast("Enter password first", "error");
     return;
   }
 
@@ -4473,21 +5207,14 @@ async function sendLogsToTelegram() {
     if (data.success) {
       showToast("Logs sent ✅");
     } else {
-      showToast(data.message || "Failed", false);
+      showToast(data.message || "Failed", "error");
     }
 
   } catch (err) {
     console.error(err);
-    showToast("Error sending logs", false);
+    showToast("Error sending logs", "error");
   }
 }
-
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    const box = document.getElementById("logBox");
-    box.classList.remove("fullscreen-log");
-  }
-});
 
 async function clearLogs() {
   if (!confirm("Delete all logs?")) return;
@@ -4513,7 +5240,7 @@ async function verifyAccess() {
   const password = document.getElementById("accessPassword").value;
 
   if (!password) {
-    showToast("Enter password", false);
+    showToast("Enter password", "error");
     return;
   }
 
@@ -4547,12 +5274,12 @@ async function verifyAccess() {
       document.getElementById("accessPassword").disabled = true;
       btn.style.display = "none";
     } else {
-      showToast("Wrong password", false);
+      showToast("Wrong password", "error");
     }
 
   } catch (err) {
     console.error(err);
-    showToast("Network error", false);
+    showToast("Network error", "error");
   }
 
   btn.disabled = false;
@@ -4578,39 +5305,6 @@ async function saveLogSettingsSecure() {
   }
 }
 
-//INIT//
-document.addEventListener("DOMContentLoaded", async () => {
-
-  const statusEl = document.getElementById("statusFilter");
-  if (statusEl) statusEl.value = "";
-
-  const brandEl = document.getElementById("brandFilter");
-  if (brandEl) brandEl.value = "";
-
-  const searchEl = document.getElementById("search");
-  if (searchEl) searchEl.value = "";
-
-  await checkUser();
-  await loadBrands();
-  await init();
-
-  const activeMenu =
-    document.querySelector(".menu-item.active") ||
-    document.querySelector(".menu-item");
-
-  showPage({ target: activeMenu }, "dashboard");
-
-  loadDashboard();
-
-  const devEl = document.getElementById("devOptions");
-  if (devEl) {
-    devEl.style.display = devMode ? "block" : "none";
-  }
-
-});
-
-
-
 // EVENTS
 ["search", "brandFilter", "essStatusFilter", "agentPrefixFilter", "statusFilter", "sentFilter", "smsFilter"]
 .forEach(id => {
@@ -4622,12 +5316,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     load();
   });
 });
-
-document.getElementById("search").addEventListener("keypress", function(e) {
-  if (e.key === "Enter") {
-  }
-});
-
 
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -4912,6 +5600,9 @@ async function loadDashboard() {
 
     statUsers.innerText = data.activeUsers;
 
+    statReceived.innerText = data.received || 0;
+    statNotReceived.innerText = data.notReceived || 0;
+
     // BRAND STATS
     brandStats.innerHTML = "";
     data.brandStats.forEach(b => {
@@ -4978,7 +5669,6 @@ function openDepositModal() {
     ? "Edit Deposit"
     : "Add Deposit";
 
-  // ONLY clear if ADD mode
   if (!editingId) {
     document.getElementById("agent").value = "";
     document.getElementById("depositId").value = "";
@@ -4990,7 +5680,7 @@ function openDepositModal() {
     document.getElementById("image").value = "";
   }
 
-  document.getElementById("depositModal").style.display = "block";
+  document.getElementById("depositModal").style.display = "flex";
 }
 
 function closeDepositModal() {
@@ -5009,17 +5699,14 @@ async function submitDeposit() {
     image: document.getElementById("image").value
   };
 
-  // 🔥 ONLY validate when ADDING
   if (!editingId) {
-  // ADD mode only
-  if (!data.ref?.trim() || !data.amount?.trim() || !data.agent?.trim()) {
-    showToast("Please fill required fields");
-    return;
+    if (!data.ref?.trim() || !data.amount?.trim() || !data.agent?.trim()) {
+      showToast("Please fill required fields");
+      return;
+    }
   }
-}
 
   let url = "/api/manual-add";
-
   if (editingId) {
     url = "/api/edit-full";
     data.id = editingId;
@@ -5033,17 +5720,22 @@ async function submitDeposit() {
 
   const result = await res.json();
 
-  if (result.success) {
-    showToast(editingId ? "Updated" : "Added");
-
-    editingId = null;
-    closeDepositModal();
-
-    allData = [];
-    load();
-  } else {
-    showToast("Failed", false);
+  if (!res.ok) {
+    if (result.type === "duplicate") {
+      showToast("⚠ Duplicate detected (Ref + Deposit ID)", "warning");
+    } else {
+      showToast("❌ " + result.message, "error");
+    }
+    return;
   }
+
+  showToast(editingId ? "Updated" : "Added", "success");
+
+  editingId = null;
+  closeDepositModal();
+
+  allData = [];
+  load();
 }
 
 ////////////////Delete Null/////////////////////
@@ -5073,12 +5765,12 @@ async function deleteRow(id) {
 
       renderTable();
     } else {
-      showToast("Failed", false);
+      showToast("Failed", "error");
     }
 
   } catch (err) {
     console.error("DELETE ERROR:", err); // 🔥 VERY IMPORTANT
-    showToast("Error", false);
+    showToast("Error", "error");
   }
 }
 
@@ -5101,7 +5793,7 @@ function editDeposit(id) {
 
   openDepositModal(); // ✅ now safe
 }
-///////////////////////////////Video Case Page/////////////////////////////////////////////////////////
+///////////////////////////////Video Case Page////////////////////////////////////////////////////////////////////////////////////////
 let videoData = [];
 let videoPage = 1;
 const videoPerPage = 20;
@@ -5142,7 +5834,7 @@ if (videoBulkSendBtn) {
   videoBulkSendBtn.onclick = async () => {
 
     if (videoSelectedIds.size === 0) {
-      showToast("⚠️ No rows selected", "warning");
+      showToast("No rows selected", "warning");
       return;
     }
 
@@ -5310,7 +6002,7 @@ function openVideoSyncModal() {
 
 async function syncVideo() {
   try {
-    showToast("Syncing video...", true);
+    showToast("Syncing video...", "info");
 
     const res = await fetch("/api/sync", {
       method: "POST",
@@ -5323,15 +6015,15 @@ async function syncVideo() {
     const data = await res.json();
 
     if (data.success) {
-      showToast("Video sync completed", true);
+      showToast("Video sync completed", "success");
       loadVideoCases(); // refresh table
     } else {
-      showToast("Sync failed", false);
+      showToast("Sync failed", "error");
     }
 
   } catch (err) {
     console.error(err);
-    showToast("Error syncing", false);
+    showToast("Error syncing", "error");
   }
 }
 
@@ -5351,7 +6043,7 @@ async function runVideoSync() {
   const status = document.getElementById("syncStatusFilter").value;
 
   closeSyncModal();
-  showToast("🔄 Syncing Video Case...");
+  showToast("🔄 Syncing Video Case...", "info");
 
   try {
     const res = await fetch("/api/sync-video", {
@@ -5371,15 +6063,15 @@ async function runVideoSync() {
     console.log("SYNC RESULT:", data);
 
     if (data.success) {
-      showToast(`✅ Synced ${data.inserted} rows`);
+      showToast(`✅ Synced ${data.inserted} rows`, "success");
       loadVideoCases(); // reload table
     } else {
-      showToast("❌ Sync failed: " + (data.message || ""), false);
+      showToast("❌ Sync failed: " + (data.message || ""), "error");
     }
 
   } catch (err) {
     console.error("SYNC ERROR:", err);
-    showToast("❌ Error syncing", false);
+    showToast("❌ Error syncing", "error");
   }
 }
 
@@ -5430,7 +6122,7 @@ function bindVideoBulkSend() {
     const ids = Array.from(videoSelectedIds);
 
     if (!ids.length) {
-      showToast("⚠️ No rows selected", "warning");
+      showToast("No rows selected", "warning");
       return;
     }
 
@@ -5539,41 +6231,6 @@ document.addEventListener("change", (e) => {
     row.classList.toggle("active-row", e.target.checked);
   }
 });
-
-async function updateVideo(id, status) {
-  let reason = "";
-
-  if (status === "NOT RECEIVED") {
-    reason = prompt("Enter reason:") || "";
-  }
-
-  try {
-    const res = await fetch("/api/video/update", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        id,
-        status,
-        reason,
-        username: currentUser.username
-      })
-    });
-
-    const data = await res.json();
-
-    if (data.success) {
-      showToast("Updated ✅");
-      loadVideoCases(); // 🔥 refresh table
-    } else {
-      showToast("Failed ❌");
-    }
-
-  } catch (err) {
-    console.error(err);
-    showToast("Error ❌");
-  }
-}
 
 async function loadVideoSettled() {
 
@@ -5778,11 +6435,6 @@ function bindVideoFilters() {
   });
 });
 
-document.addEventListener("DOMContentLoaded", () => {
-  bindVideoFilters();
-  initVideoBulkActions();
-});
-
 function exportVideoCSV() {
   const search = document.getElementById("videoSearch")?.value || "";
   const agent = document.getElementById("videoAgentFilter")?.value || "";
@@ -5799,7 +6451,110 @@ function exportVideoCSV() {
   window.open(`/api/export/video?${params.toString()}`, "_blank");
 }
 
-//////////////////////////////SMS PAGE////////////////////////////////////////////////////////////
+async function bulkDeleteVideoCases() {
+  const selected = Array.from(videoSelectedIds);
+
+  if (selected.length === 0) {
+    showToast("No rows selected", "warning");
+    return;
+  }
+
+  const confirmed = await showConfirmModal(
+    `⚠️ Permanently delete ${selected.length} video cases?\nThis cannot be undone!`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    showToast("Deleting video cases...", "info");
+
+    const res = await fetch("/api/video-cases/bulk-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: selected }),
+      credentials: "include"
+    });
+
+    const data = await res.json();
+
+    videoSelectedIds.clear();
+    document.getElementById("videoSelectAll").checked = false;
+
+    await loadVideoCases(); // ⚠️ make sure this is your reload function
+
+    showToast(`🗑️ ${data.deleted || 0} video cases deleted`, "success");
+
+  } catch (err) {
+    console.error(err);
+    showToast("Bulk delete failed", "error");
+  }
+}
+
+async function submitVideo() {
+  const ref = document.getElementById("v_ref").value;
+  const agent = document.getElementById("v_agent").value;
+  const customer = document.getElementById("v_customer").value;
+  const amount = document.getElementById("v_amount").value;
+  const date = document.getElementById("v_date").value;
+  const video = document.getElementById("v_video").value;
+
+  if (!ref || !agent) {
+    showToast("⚠️ Reference & Agent required", "warning");
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/video-case", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        ref,
+        agent,
+        customer,
+        amount,
+        date,
+        video
+      })
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      showToast("✅ Video case added", "success");
+
+      closeVideoModal();   // 👈 close modal
+      loadVideoCases();    // 👈 refresh table
+
+      // optional reset form
+      document.getElementById("v_ref").value = "";
+      document.getElementById("v_agent").value = "";
+      document.getElementById("v_customer").value = "";
+      document.getElementById("v_amount").value = "";
+      document.getElementById("v_date").value = "";
+      document.getElementById("v_video").value = "";
+
+    } else {
+      showToast("❌ Insert failed", "error");
+    }
+
+  } catch (err) {
+    console.error(err);
+    showToast("❌ Error submitting", "error");
+  }
+}
+
+function openVideoModal() {
+  document.getElementById("videoModal").style.display = "flex";
+}
+
+function closeVideoModal() {
+  document.getElementById("videoModal").style.display = "none";
+}
+
+//////////////////////////////SMS PAGE///////////////////////////////////////////////////////////////////////////////////////////////////
 let isUploadingSMS = false;
 
 document.getElementById("smsUploadFile").addEventListener("change", async function () {
@@ -5877,7 +6632,7 @@ async function resetSMS() {
     const data = await res.json();
 
     if (data.success) {
-      showToast(`🧹 ${data.deleted} SMS records deleted`, "success");
+      showToast(`${data.deleted} SMS records deleted`, "success");
 
       // 🔥 refresh table
       smsPage = 1;
@@ -6016,7 +6771,7 @@ async function createUser() {
   const role = document.getElementById("newRole").value;
 
   if (!username || !password) {
-    showToast("Fill all fields", false);
+    showToast("Fill all fields", "error");
     return;
   }
 
@@ -6030,10 +6785,10 @@ async function createUser() {
   const data = await res.json();
 
   if (data.success) {
-    showToast("User created");
+    showToast("User created", "success");
     closeCreateUserModal();
   } else {
-    showToast(data.message || "Failed", false);
+    showToast(data.message || "Failed", "error");
   }
 }
 
@@ -6132,7 +6887,61 @@ if (u.lastActive) {
 });
 }
 
+function registerSocketUser() {
+  if (!currentUser) {
+    console.warn("⚠ No currentUser yet");
+    return;
+  }
+
+  socket.emit("register", currentUser);
+  console.log("🔥 Socket registered:", currentUser);
+}
+
+async function initUser() {
+  const res = await fetch("/api/me", {
+    credentials: "include"
+  });
+
+  const data = await res.json();
+
+  currentUser = data.username;
+
+  // ✅ REGISTER SOCKET HERE
+  registerSocketUser();
+}
+
 function applyRoleUI() {
+  if (!currentUser || !currentUser.role) return;
+
+  const syncAllBtn = document.getElementById("syncAllBtn");
+  const syncCheckingBtn = document.getElementById("syncCheckingBtn");
+
+  // 🔴 Sync ALL → developer only
+  if (syncAllBtn) {
+    if (currentUser.role !== "developer") {
+      syncAllBtn.style.display = "none"; // 🔥 best UX
+      // OR use:
+      // syncAllBtn.disabled = true;
+      // syncAllBtn.title = "Developer only";
+    }
+  }
+
+  // 🟡 Sync CHECKING → admin + developer
+  if (syncCheckingBtn) {
+    if (!["admin", "developer"].includes(currentUser.role)) {
+      syncCheckingBtn.disabled = true;
+      syncCheckingBtn.title = "Admin or Developer only";
+    }
+  }
+
+  if (currentUser.role !== "developer") {
+  document.querySelectorAll(".role-select").forEach(el => {
+    el.disabled = true;
+    el.title = "Developer only";
+  });
+}
+
+  // 🔒 your existing admin actions (keep this)
   if (!["admin", "developer"].includes(currentUser.role)) {
     document.querySelectorAll("#adminActions button").forEach(btn => {
       btn.disabled = true;
@@ -6142,14 +6951,32 @@ function applyRoleUI() {
 }
 
 async function changeRole(id, role) {
-  await fetch("/api/user-role", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ id, role }),
-    credentials: "include"
-  });
+  // 🔒 frontend protection
+  if (currentUser.role !== "developer") {
+    showToast("❌ Only developer can change roles", "error");
+    return;
+  }
 
-  showToast("Role updated");
+  try {
+    const res = await fetch("/api/user-role", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, role }),
+      credentials: "include"
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      showToast("❌ " + (data.message || "Failed to update role"), "error");
+      return;
+    }
+
+    showToast("✅ Role updated", "success");
+
+  } catch (err) {
+    showToast("❌ Error updating role", "error");
+  }
 }
 
 async function deleteUser(id) {
@@ -6185,14 +7012,14 @@ async function changePassword() {
   const confirm = document.getElementById("confirmPassword").value;
 
   if (!current || !newPass || !confirm) {
-    showToast("Fill all fields", false);
+    showToast("Fill all fields", "error");
     btn.disabled = false;
     btn.innerText = "Update";
     return;
   }
 
   if (newPass !== confirm) {
-    showToast("Passwords do not match", false);
+    showToast("Passwords do not match", "error");
     btn.disabled = false;
     btn.innerText = "Update";
     return;
@@ -6219,7 +7046,7 @@ async function changePassword() {
 
     closeChangePasswordModal();
   } else {
-    showToast(data.message || "Failed", false);
+    showToast(data.message || "Failed", "error");
   }
 
   btn.disabled = false;
@@ -6257,6 +7084,493 @@ function startUsersAutoRefresh() {
   }, 10000);
 }
 startUsersAutoRefresh();
+
+////////////////////////////Hotkey: SPACE to confirm in modals///////////////////////////////////////////////////////////////////////////
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    const box = document.getElementById("logBox");
+    box.classList.remove("fullscreen-log");
+  }
+});
+
+document.addEventListener("keydown", function (e) {
+  if (e.code === "Space" || e.code === "Enter") {
+
+    // 🚫 ignore typing inside inputs
+    const tag = document.activeElement.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+    const modal = document.getElementById("confirmModal");
+
+    if (modal && modal.style.display !== "none") {
+      const btn = modal.querySelector("[data-confirm]");
+
+      if (btn && !btn.disabled) {
+        e.preventDefault();
+        btn.click();
+      }
+    }
+  }
+});
+
+//////////////////////////////////////////////////////
+// NOTIFICATION SYSTEM
+//////////////////////////////////////////////////////
+let unreadCount = 0;
+let notifications = [];
+
+function updateBadge() {
+  const badge = document.getElementById("notifBadge");
+
+  if (!badge) return;
+
+  if (unreadCount > 0) {
+    badge.style.display = "block";
+    badge.innerText = unreadCount > 99 ? "99+" : unreadCount;
+  } else {
+    badge.style.display = "none";
+  }
+}
+
+function pushNotification(n) {
+  notifications.unshift({
+    ...n,
+    createdAt: n.createdAt || new Date()
+  });
+
+  // limit list (prevent memory overload)
+  if (notifications.length > 100) {
+    notifications = notifications.slice(0, 100);
+  }
+
+  unreadCount++;
+
+  saveNotifications();
+  updateBadge();
+  renderNotifications();
+}
+
+function playSound() {
+  const sound = document.getElementById("notifSound");
+  if (sound) {
+    sound.currentTime = 0;
+    sound.play().catch(() => {});
+  }
+}
+
+function renderNotifications() {
+  const list = document.getElementById("notifList");
+  if (!list) return;
+
+  if (notifications.length === 0) {
+    list.innerHTML = `<div style="padding:10px;text-align:center;">No notifications</div>`;
+    return;
+  }
+
+  const colorMap = {
+    SYNC: "#3b82f6",
+    MESSAGE: "#10b981",
+    SETTLED: "#22c55e",
+    BULK: "#f59e0b",
+    TG: "#8b5cf6",
+    USER: "#06b6d4",
+    SYSTEM: "#ef4444"
+  };
+
+  const iconMap = {
+    SYNC: "🔄",
+    MESSAGE: "💬",
+    SETTLED: "✅",
+    BULK: "📦",
+    TG: "📤",
+    USER: "👤",
+    SYSTEM: "⚙"
+  };
+
+  list.innerHTML = notifications.map(n => `
+    <div style="
+      padding:12px;
+      border-bottom:1px solid rgba(255,255,255,0.05);
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+      transition:0.2s;
+    "
+    onmouseover="this.style.background='#334155'"
+    onmouseout="this.style.background='transparent'">
+
+      <div style="
+        font-weight:600;
+        font-size:13px;
+        color:${colorMap[n.type] || "#fff"};
+      ">
+        ${iconMap[n.type] || "🔔"} ${n.title || n.sender || "Notification"}
+      </div>
+
+      <div style="
+        font-size:12px;
+        color:#cbd5f1;
+      ">
+        ${n.message}
+      </div>
+
+      ${
+        n.meta?.depositIds
+          ? `<div style="font-size:11px;color:#94a3b8;">
+              ${n.meta.depositIds.slice(0,5).join(", ")}
+              ${n.meta.depositIds.length > 5 ? "..." : ""}
+            </div>`
+          : ""
+      }
+
+      <div style="
+        font-size:10px;
+        color:#64748b;
+      ">
+        ${new Date(n.createdAt).toLocaleTimeString()}
+      </div>
+
+    </div>
+  `).join("");
+}
+
+function toggleNotifDropdown() {
+  const box = document.getElementById("notifDropdown");
+
+  box.classList.toggle("show");
+
+  if (box.classList.contains("show")) {
+    unreadCount = 0;
+    saveNotifications();
+    updateBadge();
+  }
+}
+
+
+//////////////////////////////////////////////////////
+// SOCKET INTEGRATION
+//////////////////////////////////////////////////////
+// 💬 chat messages
+socket.on("receive-message", (data) => {
+  pushNotification({
+    type: "MESSAGE",
+    sender: data.sender,
+    message: data.message,
+    createdAt: new Date()
+  });
+
+  showToast(`💬 ${data.sender}: ${data.message}`);
+  playSound();
+});
+
+// 🔔 system notifications
+socket.on("new-notification", (data) => {
+  pushNotification(data);
+  playSound();
+});
+
+function saveNotifications() {
+  localStorage.setItem("notifications", JSON.stringify(notifications));
+  localStorage.setItem("unreadCount", unreadCount);
+}
+
+
+//////////////////////////////////////////////////////
+// CLOSE DROPDOWN WHEN CLICK OUTSIDE
+//////////////////////////////////////////////////////
+document.addEventListener("click", (e) => {
+  const wrapper = document.getElementById("notifWrapper");
+
+  if (!wrapper) return;
+
+  if (!wrapper.contains(e.target)) {
+    document.getElementById("notifDropdown").classList.remove("show");
+  }
+});
+
+///////////////////////////////////////////////////////////Messaging System////////////////////////////////////////////////////////
+let allUsers = [];
+let selectedTarget = "ALL";
+let chatFontSize = parseInt(localStorage.getItem("chatFontSize")) || 20;
+
+async function loadMessageUsers() {
+  const res = await fetch("/api/users", { credentials: "include" });
+  const users = await res.json();
+
+  allUsers = users.map(u => u.username);
+
+  console.log("👥 loaded users:", allUsers);
+
+  renderUserList(allUsers);
+}
+
+function applyFontSize() {
+  document.documentElement.style.setProperty(
+    "--chat-font-size",
+    chatFontSize + "px"
+  );
+  console.log("Font applied:", chatFontSize); // 🔥 debug
+}
+
+function changeFont(step) {
+  chatFontSize += step;
+
+  if (chatFontSize < 12) chatFontSize = 12;
+  if (chatFontSize > 20) chatFontSize = 20;
+
+  localStorage.setItem("chatFontSize", chatFontSize);
+  applyFontSize();
+}
+
+function resetFont() {
+  chatFontSize = 14;
+  localStorage.setItem("chatFontSize", chatFontSize);
+  applyFontSize();
+}
+
+function renderMessages(messages) {
+  const container = document.getElementById("messagesContainer");
+
+  // 🔥 check if user is near bottom BEFORE render
+  const isNearBottom =
+    container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
+
+  container.innerHTML = messages.map(m => {
+    const username = m.username || m.sender || "Unknown";
+    const isMe = username === currentUser.username;
+
+    return `
+      <div class="chat-row ${isMe ? "me" : "other"}">
+        <div class="chat-bubble">
+          <div class="chat-meta">
+            <span>${isMe ? "You" : username}</span>
+            <span>${formatDate(m.createdAt)}</span>
+          </div>
+          <div>${m.message}</div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  // 🔥 only scroll if user already near bottom
+  if (isNearBottom) {
+    container.scrollTop = container.scrollHeight;
+  }
+}
+
+function renderUserList(list) {
+  const container = document.getElementById("userList");
+  container.innerHTML = "";
+
+  const display = ["ALL", ...list];
+
+  display.forEach(u => {
+    container.innerHTML += `
+      <div onclick="selectUser('${u}')"
+        style="padding:6px; cursor:pointer;">
+        ${u === "ALL" ? "All Users" : u}
+      </div>
+    `;
+  });
+}
+
+function filterUsers() {
+  const keyword = document.getElementById("userSearch").value.toLowerCase();
+
+  const filtered = allUsers.filter(u =>
+    u.toLowerCase().includes(keyword)
+  );
+
+  renderUserList(filtered);
+}
+
+function selectUser(user) {
+  selectedTarget = user;
+
+  document.getElementById("selectedUser").innerText =
+    user === "ALL" ? "All Users" : user;
+
+  document.getElementById("userDropdownList").style.display = "none";
+}
+
+function toggleUserDropdown() {
+  const box = document.getElementById("userDropdownList");
+  box.style.display = box.style.display === "block" ? "none" : "block";
+}
+
+function toggleMessageBar() {
+  const bar = document.getElementById("messageBar");
+  const btn = document.querySelector("[onclick='toggleMessageBar()']");
+
+  const isHidden = bar.style.transform === "translateY(100%)";
+
+  if (isHidden) {
+    bar.style.transform = "translateY(0)";
+    btn.innerText = "❌";
+  } else {
+    bar.style.transform = "translateY(100%)";
+    btn.innerText = "💬";
+  }
+
+  localStorage.setItem("chatHidden", !isHidden);
+}
+
+async function sendMessage() {
+  const input = document.getElementById("chatInput"); // use ONE id
+  const message = input.value.trim();
+
+  if (!message) return;
+
+  await fetch("/api/message", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      message,
+      target: selectedTarget
+    })
+  });
+
+  input.value = "";
+  loadMessages(); 
+}
+
+async function loadMessages() {
+  const res = await fetch("/api/messages", {
+    credentials: "include"
+  });
+
+  const data = await res.json();
+
+  renderMessages(data);
+}
+
+/////////////////////////////////////////////////////////// INIT ///////////////////////////////////////////////////////////
+document.addEventListener("DOMContentLoaded", async () => {
+
+   applyFontSize();
+
+  console.log("🚀 INIT START");
+
+  // 🔥 1. LOAD USER FIRST
+  const user = await checkUser();
+
+  if (!user) {
+    console.log("❌ No session, stop");
+    return;
+  }
+
+  console.log("👤 User ready:", user.username);
+
+  // 🔥 PAGE INIT (UNCHANGED)
+  showPage(null, 'dashboard');
+  loadMessageUsers();
+
+  // 🔥 MESSAGE BAR STATE (UNCHANGED)
+  const bar = document.getElementById("messageBar");
+  const btn = document.querySelector("[onclick='toggleMessageBar()']");
+
+  let hidden = localStorage.getItem("chatHidden");
+
+  if (hidden === null) {
+    hidden = "true";
+    localStorage.setItem("chatHidden", "true");
+  }
+
+  if (hidden === "true" && bar) {
+    bar.style.transform = "translateY(100%)";
+  }
+
+  if (btn) {
+    btn.innerText = hidden === "true" ? "💬" : "❌";
+  }
+
+  // 🔥 NOTIFICATIONS LOAD (UNCHANGED)
+  const saved = localStorage.getItem("notifications");
+  const savedUnread = localStorage.getItem("unreadCount");
+
+  if (saved) {
+    try {
+      notifications = JSON.parse(saved);
+    } catch {
+      notifications = [];
+    }
+  }
+
+  if (savedUnread) {
+    unreadCount = parseInt(savedUnread) || 0;
+  }
+
+  updateBadge();
+  renderNotifications();
+
+  // 🔥 SEARCH + SOCKET (UNCHANGED)
+  const searchInput = document.getElementById("search");
+
+  if (searchInput) {
+    let searchTimeout;
+
+    searchInput.addEventListener("input", (e) => {
+      const ref = e.target.value.trim();
+
+      if (ref.length > 5) {
+        socket.emit("focus-ref", { ref });
+      }
+
+      clearTimeout(searchTimeout);
+
+      searchTimeout = setTimeout(() => {
+        currentPage = 1;
+        load();
+      }, 300);
+    });
+  }
+
+  await init();
+
+});
+
+
+////////////////////////////////////////////////////////Side bar toggle////////////////////////////////////////////////////////
+function toggleSidebar() {
+  const sidebar = document.querySelector(".sidebar");
+
+  sidebar.classList.toggle("collapsed");
+
+  // 🔥 save only true/false
+  localStorage.setItem(
+    "sidebarCollapsed",
+    sidebar.classList.contains("collapsed")
+  );
+}
+
+function normalizeRef(ref) {
+  return ref.trim().toUpperCase();
+}
+
+// detect special characters (not A-Z, 0-9)
+function hasSpecialChar(ref) {
+  return /[^A-Z0-9]/i.test(ref);
+}
+
+// count character difference (Hamming-like)
+function countDiff(a, b) {
+  if (a.length !== b.length) return 999; // ignore different length
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) diff++;
+  }
+  return diff;
+}
+
+// load state
+window.addEventListener("DOMContentLoaded", () => {
+  const sidebar = document.querySelector(".sidebar");
+  const saved = localStorage.getItem("sidebarCollapsed");
+
+  if (saved === "true") {
+    sidebar.classList.add("collapsed");
+  }
+});
 
 ////////////////////////Syncing Indicator////////////////////////
 let isSyncing = false;
@@ -6352,7 +7666,7 @@ const getColor = (level) => {
 
     <div style="display:flex; justify-content:flex-end; gap:10px;">
       <button onclick="closeConfirm(false)" class="btn btn-secondary btn-sm">Cancel</button>
-      <button onclick="closeConfirm(true)" class="btn btn-success btn-sm">OK</button>
+      <button onclick="closeConfirm(true)" class="btn btn-success btn-sm" data-confirm>OK</button>
     </div>
   </div>
 </div>
@@ -6405,15 +7719,17 @@ const getColor = (level) => {
       <div class="modal-body text-center">
         <p>Select what to sync:</p>
 
-        <button class="btn btn-primary w-100 mb-2"
-          onclick="runSync('all')">
-          🔄 Sync ALL Data
-        </button>
+        <button id="syncAllBtn"
+  class="btn btn-primary w-100 mb-2"
+  onclick="runSync('all')">
+  🔄 Sync ALL Data
+</button>
 
-        <button class="btn btn-warning w-100"
-          onclick="runSync('checking')">
-          🟡 Sync CHECKING Only
-        </button>
+<button id="syncCheckingBtn"
+  class="btn btn-warning w-100"
+  onclick="runSync('checking')">
+  🟡 Sync CHECKING Only
+</button>
       </div>
 
     </div>
@@ -6550,6 +7866,93 @@ const getColor = (level) => {
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<button onclick="toggleMessageBar()" 
+  style="
+    position: fixed;
+    bottom: 70px;
+    right: 20px;
+    z-index: 10000;
+    width: 55px;
+    height: 55px;
+    border-radius: 50%;
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+  "
+  class="btn btn-dark shadow"
+  onmouseover="this.style.transform='scale(1.1)'"
+  onmouseout="this.style.transform='scale(1)'">
+  💬
+</button>
+
+<div id="messageBar" style="
+  position: fixed;
+  bottom: 0;
+  left: 260px;
+  right: 0;
+  background: #1e293b;
+  padding: 8px;
+  display: flex;
+  gap: 8px;
+  z-index: 9999;
+  transition: transform 0.3s ease;
+">
+
+  <div id="userDropdown" style="position:relative; width:180px;">
+
+  <!-- Selected -->
+  <div id="selectedUser" onclick="toggleUserDropdown()" style="
+    background:#fff;
+    padding:6px;
+    border-radius:6px;
+    cursor:pointer;
+  ">
+    All Users
+  </div>
+
+  <!-- Dropdown -->
+  <div id="userDropdownList" style="
+    position:absolute;
+    bottom:40px; /* opens upward so it won’t go off-screen */
+    left:0;
+    right:0;
+    background:#fff;
+    border-radius:6px;
+    max-height:260px; /* ~10 items */
+    overflow-y:auto;
+    display:none;
+    z-index:10000;
+    box-shadow:0 4px 10px rgba(0,0,0,0.2);
+  ">
+
+    <!-- 🔍 Search -->
+    <input id="userSearch" placeholder="Search..."
+      oninput="filterUsers()"
+      style="
+        width:100%;
+        padding:6px;
+        border:none;
+        border-bottom:1px solid #ccc;
+        outline:none;
+      ">
+
+    <!-- List -->
+    <div id="userList"></div>
+
+  </div>
+</div>
+
+  <input id="msgInput" placeholder="Type message..."
+    style="flex:1; padding:6px; border-radius:6px; border:none;" />
+
+  <button onclick="sendMessage()" class="btn btn-success btn-sm">
+    📤 Send
+  </button>
+
+</div>
 
 </body>
 </html>

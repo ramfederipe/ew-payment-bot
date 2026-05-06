@@ -25,5 +25,99 @@ git push -u origin main
 
 
 
-Optional to remove .git folder if you want to start fresh without git history:
+"Optional to remove .git folder if you want to start fresh without git history:""
 Remove-Item -Recurse -Force .git
+
+Commit
+git add .git commit -m "Initial commit"
+
+Connect to GitHub
+
+git remote remove origin
+git remote add origin https://github.com/ramfederipe/ew-payment-bot.git
+git remote -v
+git branch -M main
+git push -u origin main
+
+
+/////////////////////////////////////////////////////
+Server side
+
+📥 Clone your project
+git clone https://github.com/ramfederipe/ew-payment-bot.git
+cd ew-payment-bot
+
+📦 Install dependencies
+npm install
+
+🔐 Create .env
+nano .env
+
+///////////////////////////////////////////////////
+Linux + SSH” OR “Windows + RDP”
+STEP 1 — Go to your company server
+
+Open terminal on your PC:
+ssh username@server-ip
+
+//////////////////////////////////////////////
+If Windows server:
+
+Use Remote Desktop (RDP) and open:
+
+Command Prompt OR PowerShell
+👉 ❗ If you don’t know:
+
+server IP
+username/password
+
+👉 Ask your IT/admin:
+
+“Can I get SSH or RDP access to the server?”
+
+
+
+🚀 STEP 2 — Clone your project
+git clone https://github.com/ramfederipe/ew-payment-bot.git
+cd ew-payment-bot
+
+
+🚀 STEP 3 — Install Node (if needed)
+node -v
+////////////////////////
+If NOT installed:
+Linux:
+sudo apt update
+sudo apt install nodejs npm -y
+
+🚀 STEP 4 — Install dependencies
+npm install
+
+🚀 STEP 5 — Create your .env
+Linux:nano .env
+Windows:Create file manually: .env
+
+🚀 STEP 6 — Test run
+node webhook.js
+👉 If no error → working ✅
+
+🚀 STEP 7 — Make it run 24/7 (PM2)
+Install PM2:
+npm install -g pm2
+
+Run your app:
+pm2 start webhook.js --name webhook
+
+Save it:
+pm2 save
+pm2 startup
+
+🌐 STEP 8 — Access your system
+Try in browser:http://SERVER-IP:3000
+
+
+
+
+Update Git
+git status
+

@@ -101,6 +101,28 @@ CREATE TABLE IF NOT EXISTS users (
 `);
 
 db.run(`
+  CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender TEXT,
+    receiver TEXT,
+    message TEXT,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT,
+  title TEXT,
+  message TEXT,
+  meta TEXT,
+  isRead INTEGER DEFAULT 0,
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+`);
+
+db.run(`
 INSERT OR IGNORE INTO users (username, password, role)
 VALUES 
 ('rey', '123456c', 'developer'),
