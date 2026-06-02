@@ -4,10 +4,24 @@ const db = require("./db");
 
 // Config
 const { getSettings } = require("./config");
+const {
+  DEFAULT_SYNC_COLUMN_MAP,
+  getByColumnMap,
+  getColumnIndex,
+  parseColumnMap
+} = require("./sheetColumns");
+
+const path = require("path");
 
 const auth = new google.auth.GoogleAuth({
-keyFile: "credentials.json",
-scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+  keyFile: path.join(
+    __dirname,
+    "credentials",
+    "credentials.json"
+  ),
+  scopes: [
+    "https://www.googleapis.com/auth/spreadsheets"
+  ],
 });
 
 function extractSheetId(url) {
@@ -19,18 +33,26 @@ function extractSheetId(url) {
 async function syncSheets(mode = "all", filters = {}) {
 const syncTime = new Date().toISOString();
 const settings = await getSettings();
+const stats = {
+inserted: 0,
+errors: []
+};
+const syncColumnMap = parseColumnMap(
+settings.sheetColumnMap,
+DEFAULT_SYNC_COLUMN_MAP
+);
 
 let SHEET_ID, SHEETS;
 
 if (mode === "video") {
 SHEET_ID = extractSheetId(settings.videoGsheetLink);
 SHEETS = settings.videoSheetNames
-? settings.videoSheetNames.split(",")
+? settings.videoSheetNames.split(",").map(name => name.trim()).filter(Boolean)
 : [];
 } else {
 SHEET_ID = extractSheetId(settings.gsheetLink);
 SHEETS = settings.sheetNames
-? settings.sheetNames.split(",")
+? settings.sheetNames.split(",").map(name => name.trim()).filter(Boolean)
 : [];
 }
 
@@ -40,7 +62,8 @@ console.log("SHEETS:", SHEETS);
 
 if (!SHEET_ID || SHEETS.length === 0) {
 console.log("❌ Missing GSheet config");
-return;
+stats.errors.push("Missing GSheet config");
+return stats;
 }
 
 const sheets = google.sheets({
@@ -64,49 +87,53 @@ range: `${sheetName}!A:Z`,
   const headers = rows[0];
   console.log("HEADERS:", headers);
 
-  const normalize = (str) =>
-    str.toLowerCase().replace(/[^a-z0-9]/g, "");
-
-  const safeGet = (row, keywords) => {
-    const i = headers.findIndex(h => {
-      const normalizedHeader = normalize(h);
-      return keywords.some(k => normalize(k) === normalizedHeader);
-    });
-    return i !== -1 ? row[i] : "";
-  };
+  const safeGet = (row, key) => getByColumnMap(row, headers, syncColumnMap, key);
 
   console.log("📄 Processing:", sheetName);
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
 
-    const trxIdColIndex = 13;
+    const trxIdColIndex = getColumnIndex(headers, syncColumnMap.trxId);
     const trxIdRaw = (row[trxIdColIndex] || "").trim();
 
     if (mode === "checking") {
-      if (trxIdRaw !== "") {
-        console.log("⏭️ SKIP (COLUMN N NOT EMPTY):", trxIdRaw);
-        continue;
-      }
-    }
 
-    const agentNumber = safeGet(row, ["agent number"]);
-    const depositId = safeGet(row, ["deposit id"]);
-    const ref = safeGet(row, ["reference no"]);
-    const customerNumber = safeGet(row, ["customer number"]);
+  const normalizedTrx =
+    trxIdRaw.trim();
+
+  if (
+    normalizedTrx !== "" &&
+    normalizedTrx !== "-"
+  ) {
+
+    console.log(
+      "⏭️ SKIP (COLUMN N HAS TRX ID):",
+      trxIdRaw
+    );
+
+    continue;
+  }
+
+}
+
+    const agentNumber = safeGet(row, "agentNumber");
+    const depositId = safeGet(row, "depositId");
+    const ref = safeGet(row, "referenceNo");
+    const customerNumber = safeGet(row, "customerNumber");
 
     const agentName =
-      safeGet(row, ["agent name"]) ||
-      safeGet(row, ["username"]) ||
-      safeGet(row, ["agent number"]) ||
+      safeGet(row, "agentName") ||
+      safeGet(row, "username") ||
+      safeGet(row, "agentNumber") ||
       "UNKNOWN";
 
     const agentGroupFromName = (agentName || "")
     .substring(0, 3)
     .toUpperCase();
 
-    const videoLink = safeGet(row, ["vdo link","video","video link"]);
-    const videoStatus = (safeGet(row, ["status"]) || "").trim();
+    const videoLink = safeGet(row, "videoLink");
+    const videoStatus = (safeGet(row, "videoStatus") || "").trim();
     const brand = sheetName;
 
     if (mode === "video") {
@@ -124,15 +151,15 @@ range: `${sheetName}!A:Z`,
     // 🔥 MODE FILTER
     if (mode !== "video" && videoLink) continue;
 
-    const rawAmount = safeGet(row, ["amount"]);
+    const rawAmount = safeGet(row, "amount");
     const cleanAmount = String(rawAmount).replace(/,/g, "");
     const amount = parseFloat(cleanAmount) || 0;
 
-    const depositDate = safeGet(row, ["deposit date"]);
+    const depositDate = safeGet(row, "depositDate");
 
-    const imageLink = safeGet(row, ["imagelink", "image link"]);
-    const date = safeGet(row, ["date posted", "date"]);
-    const essStatus = safeGet(row, ["ess status"]);
+    const imageLink = safeGet(row, "imageLink");
+    const date = safeGet(row, "datePosted") || safeGet(row, "date");
+    const essStatus = safeGet(row, "essStatus");
 
     const finalEssStatus =
       essStatus && essStatus.trim() !== ""
@@ -155,15 +182,43 @@ range: `${sheetName}!A:Z`,
 
     // 🔥 ONLY CHECK EXISTING FOR MAIN MODE
     let existing = null;
-    if (mode !== "video") {
-      existing = await new Promise(resolve => {
-        db.get(
-          `SELECT * FROM transactions WHERE transactionReference = ?`,
-          [cleanRef],
-          (err, row) => resolve(row)
-        );
-      });
-    }
+
+if (mode === "video") {
+
+  existing = await new Promise(resolve => {
+
+    db.get(`
+      SELECT *
+      FROM video_cases
+      WHERE depositId = ?
+      AND transactionReference = ?
+    `,
+    [cleanDepositId, cleanRef],
+    (err, row) => resolve(row));
+
+  });
+
+  // 🔥 SKIP VIDEO DUPLICATE
+  if (existing) {
+    console.log("⏭️ SKIP VIDEO DUPLICATE:", cleanRef);
+    continue;
+  }
+
+} else {
+
+  existing = await new Promise(resolve => {
+
+    db.get(`
+      SELECT *
+      FROM transactions
+      WHERE transactionReference = ?
+    `,
+    [cleanRef],
+    (err, row) => resolve(row));
+
+  });
+
+}
 
     // =========================
     // 🔁 EXISTING HANDLING (MAIN ONLY)
@@ -210,6 +265,7 @@ range: `${sheetName}!A:Z`,
             ], resolve);
           });
 
+          stats.inserted++;
           console.log("🎥 VIDEO INSERT (REJECTED):", cleanRef);
         } else {
           // NORMAL INSERT
@@ -241,6 +297,7 @@ range: `${sheetName}!A:Z`,
             ], resolve);
           });
 
+          stats.inserted++;
           console.log("➕ INSERT (REJECTED CHANGE):", cleanRef);
         }
 
@@ -298,6 +355,7 @@ range: `${sheetName}!A:Z`,
         ], resolve);
       });
 
+      stats.inserted++;
       console.log("🎥 VIDEO INSERT:", cleanRef);
     } else {
       await new Promise(resolve => {
@@ -328,6 +386,7 @@ range: `${sheetName}!A:Z`,
         ], resolve);
       });
 
+      stats.inserted++;
       console.log("➕ INSERT NEW:", cleanRef);
     }
   }
@@ -335,12 +394,14 @@ range: `${sheetName}!A:Z`,
   console.log(`✅ Finished ${sheetName}`);
 } catch (err) {
   console.error(`❌ Error syncing ${sheetName}:`, err.message);
+  stats.errors.push(`${sheetName}: ${err.message}`);
 }
 
 
 }
 
 console.log("🎯 Sync complete");
+return stats;
 }
 
 module.exports = { syncSheets };

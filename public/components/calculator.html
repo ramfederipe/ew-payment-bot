@@ -1,0 +1,94 @@
+<button id="essCalcFab" type="button" aria-label="Open calculator">
+    <i class="bi bi-calculator"></i>
+</button>
+
+<section id="essCalculator" aria-label="ESS Calculator">
+    <header id="essCalcTopbar">
+        <div>
+            <div class="calc-title">ESS Calculator</div>
+            <div class="calc-subtitle">Basic and scientific modes</div>
+        </div>
+        <div class="calc-window-actions">
+            <button id="calcMinimize" type="button" title="Minimize">
+                <i class="bi bi-dash"></i>
+            </button>
+            <button id="essCalcClose" type="button" title="Close">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+    </header>
+
+    <div id="calcTabs" role="tablist">
+        <button class="calc-tab active" type="button" data-tab="calculator">Calculator</button>
+        <button class="calc-tab" type="button" data-tab="operations">Operations</button>
+        <button class="calc-tab" type="button" data-tab="history">History</button>
+    </div>
+
+    <div class="calc-page active" id="calculatorTab">
+        <div class="calc-mode-toggle" role="group" aria-label="Calculator mode">
+            <button class="calc-mode active" type="button" data-mode="basic">Basic</button>
+            <button class="calc-mode" type="button" data-mode="scientific">Scientific</button>
+        </div>
+
+        <div class="calc-screen">
+            <div id="calcExpression">0</div>
+            <div id="essCalcDisplay">0</div>
+        </div>
+
+        <div id="scientificKeys" class="scientific-hidden">
+            <button type="button" class="calc-key science" data-action="fn" data-value="sqrt">sqrt</button>
+            <button type="button" class="calc-key science" data-action="fn" data-value="square">x^2</button>
+            <button type="button" class="calc-key science" data-action="fn" data-value="percent">%</button>
+            <button type="button" class="calc-key science" data-action="constant" data-value="pi">pi</button>
+            <button type="button" class="calc-key science" data-action="fn" data-value="sin">sin</button>
+            <button type="button" class="calc-key science" data-action="fn" data-value="cos">cos</button>
+            <button type="button" class="calc-key science" data-action="fn" data-value="tan">tan</button>
+            <button type="button" class="calc-key science" data-action="constant" data-value="e">e</button>
+        </div>
+
+        <div id="calcKeypad">
+            <button type="button" class="calc-key utility" data-action="clear">AC</button>
+            <button type="button" class="calc-key utility" data-action="backspace"><i class="bi bi-backspace"></i></button>
+            <button type="button" class="calc-key utility" data-action="sign">+/-</button>
+            <button type="button" class="calc-key operator" data-action="operator" data-value="/">/</button>
+
+            <button type="button" class="calc-key" data-action="number" data-value="7">7</button>
+            <button type="button" class="calc-key" data-action="number" data-value="8">8</button>
+            <button type="button" class="calc-key" data-action="number" data-value="9">9</button>
+            <button type="button" class="calc-key operator" data-action="operator" data-value="*">x</button>
+
+            <button type="button" class="calc-key" data-action="number" data-value="4">4</button>
+            <button type="button" class="calc-key" data-action="number" data-value="5">5</button>
+            <button type="button" class="calc-key" data-action="number" data-value="6">6</button>
+            <button type="button" class="calc-key operator" data-action="operator" data-value="-">-</button>
+
+            <button type="button" class="calc-key" data-action="number" data-value="1">1</button>
+            <button type="button" class="calc-key" data-action="number" data-value="2">2</button>
+            <button type="button" class="calc-key" data-action="number" data-value="3">3</button>
+            <button type="button" class="calc-key operator" data-action="operator" data-value="+">+</button>
+
+            <button type="button" class="calc-key wide" data-action="number" data-value="0">0</button>
+            <button type="button" class="calc-key" data-action="decimal">.</button>
+            <button type="button" class="calc-key equals" data-action="equals">=</button>
+        </div>
+    </div>
+
+    <div class="calc-page" id="operationsTab">
+        <div class="ops-card">
+            <div class="ops-label">Selected Rows Total</div>
+            <div class="ops-value" id="selectedRowsTotal">0</div>
+        </div>
+        <div class="ops-card">
+            <div class="ops-label">Settlement Compare</div>
+            <div class="calc-compare-row">
+                <input type="number" id="statementAmount" placeholder="Statement Amount">
+                <button id="compareSettlement" type="button">Compare</button>
+            </div>
+            <div id="settlementDifference">Difference: 0</div>
+        </div>
+    </div>
+
+    <div class="calc-page" id="historyTab">
+        <div id="calcHistoryList" class="calc-history-empty">No calculations yet</div>
+    </div>
+</section>

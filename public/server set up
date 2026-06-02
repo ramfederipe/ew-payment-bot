@@ -1,0 +1,39 @@
+Server Set Up
+
+📁 Project Structure
+ew-payment-bot/
+│
+├── helpers/
+├── middleware/
+├── public/
+│
+├── bot.js
+├── config.js
+├── crypto.js
+├── db.js
+├── gsheet.js
+├── hashUsers.js
+├── index.js
+├── socket.js
+├── sync.js
+├── video-cron.js
+├── webhook.js   ⭐ (main server)
+│
+├── package.json
+├── package-lock.json
+├── .gitignore
+│
+└── database.db
+
+
+1. Install Node.js (v18+ recommended)
+
+2. Install dependencies:
+   npm install
+
+3. Add environment/config:
+   - .env file 
+   - credentials.json
+
+4. Run the app:
+   node webhook.js

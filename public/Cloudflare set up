@@ -1,0 +1,37 @@
+
+Windows 64-bit
+
+download: cloudflared.exe
+
+Windows + R
+cmd
+cd C:\cloudflared
+
+cloudflared tunnel route dns esspanel app.esspanel.uk
+
+cloudflared tunnel run esspanel
+
+cloudflared tunnel login
+
+cloudflared --version
+
+cloudflared tunnel login
+
+cloudflared tunnel create esspanel
+
+C:\Users\user\.cloudflared\
+config.yml
+tunnel: e63d3f13-c49e-41f3-8a7e-537b41517dcc
+
+credentials-file: C:\Users\user\.cloudflared\e63d3f13-c49e-41f3-8a7e-537b41517dcc.json
+
+ingress:
+  - hostname: app.esspanel.uk
+    service: http://localhost:3000
+
+  - service: http_status:404
+
+
+
+cloudflared tunnel route dns esspanel app.esspanel.uk
+cloudflared tunnel run esspanel

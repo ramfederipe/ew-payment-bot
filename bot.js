@@ -3,76 +3,86 @@ const TelegramBot = require("node-telegram-bot-api");
 const db = require("./db");
 const { getIO } = require("./socket");
 
-const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
+let bot;
+const FOLLOW_UP_CHECK_INTERVAL_MS = 60 * 1000;
+const DEFAULT_FOLLOW_UP_INTERVAL_MINUTES = 30;
+const MAX_FOLLOW_UPS = 3;
+const DEFAULT_PENDING_MESSAGE_FIELDS = ["agent", "ref", "amount", "customer", "image"];
+const DEFAULT_MANUAL_REPLY_PARSER = {
+  shopLabels: ["Shop Name", "Agent", "Agent Name"],
+  agentNumberLabels: ["Agent Number", "Wallet Number", "Agent No"],
+  amountLabels: ["Amount"],
+  referenceLabels: ["Reference", "Ref"],
+  statusLabels: ["Status"],
+  receivedKeywords: ["YES", "Y", "RECEIVED"],
+  notReceivedKeywords: ["NO", "N", "NOT RECEIVED"]
+};
+let followUpRunning = false;
 
-const { transcribeAndTranslate } = require("./helpers/transcribe");
+const followUpLabels = {
+  1: "1st FF",
+  2: "2nd FF",
+  3: "Final FF"
+};
 
-/* ===============================
-   📤 SEND TELEGRAM (PENDING)
-================================ */
-async function sendTelegram(data) {
-  try {
-    const msg = await bot.sendMessage(data.chatId, `💰 Deposit
-Agent: ${data.agentName}
-Ref: ${data.transactionReference}
-Amount: ${data.amount}
-Customer: ${data.customerNumber}
+const followUpMessageLabels = {
+  1: "1st",
+  2: "2nd",
+  3: "Final"
+};
 
-Image: ${data.imageLink}`, {
-      reply_markup: {
-        inline_keyboard: [[
-          { text: "✅ YES", callback_data: `yes_${data.id}` },
-          { text: "❌ NO", callback_data: `no_${data.id}_select` }
-        ]]
-      }
-    });
+function addSystemLog(level, message) {
+  const cleanLevel = String(level || "INFO").toUpperCase();
+  const cleanMessage = String(message || "").replace(/\s+/g, " ").trim().slice(0, 1200);
 
-    return msg; // ✅ IMPORTANT
-
-  } catch (err) {
-    console.error("❌ TELEGRAM ERROR:", err.message);
-    return null; // ✅ IMPORTANT
-  }
+  db.run(`
+    INSERT INTO system_logs (level, message)
+    VALUES (?, ?)
+  `, [cleanLevel, cleanMessage], (err) => {
+    if (err) console.error("BOT SYSTEM LOG ERROR:", err.message);
+  });
 }
 
-/* ===============================
-   📤 SEND TELEGRAM (VIDEO)
-================================ */
-async function sendVideoTelegram(data) {
-  const message = `🎥 Video Case
+process.on("uncaughtException", (err) => {
+  addSystemLog("CRITICAL", `Bot uncaught exception: ${err.stack || err.message}`);
+});
 
-Agent: ${data.agentName}
-Ref: ${data.transactionReference}
-Amount: ${data.amount}
+process.on("unhandledRejection", (reason) => {
+  const message = reason?.stack || reason?.message || String(reason);
+  addSystemLog("CRITICAL", `Bot unhandled rejection: ${message}`);
+});
 
-Video: ${data.imageLink}`;
+db.get(`SELECT * FROM settings WHERE id = 1`, (err, row) => {
 
-  try {
-    // 🔥 IMPORTANT: capture the sent message
-    const msg = await bot.sendMessage(data.chatId, message, {
-      reply_markup: {
-        inline_keyboard: [[
-          { text: "✅ RECEIVED", callback_data: `video_yes_${data.id}` },
-          { text: "❌ NOT RECEIVED", callback_data: `video_no_${data.id}` }
-        ]]
-      }
-    });
-
-    console.log("📤 VIDEO SENT:", data.id, "MSG ID:", msg.message_id);
-
-    // 🔥 SAVE message_id to DB
-    db.run(`
-      UPDATE video_cases
-      SET telegramMessageId = ?
-      WHERE id = ?
-    `, [msg.message_id, data.id]);
-
-  } catch (err) {
-    console.error("❌ VIDEO SEND ERROR:", err.message);
+  if (err) {
+    console.error("❌ Failed to load bot settings:", err);
+    addSystemLog("ERROR", `Bot settings load failed: ${err.message}`);
+    return;
   }
-}
 
-/* ===============================
+  // 🔥 use DB token if available
+  if (row?.botToken && row.botToken !== process.env.TELEGRAM_TOKEN) {
+
+    console.log("✅ Using Telegram token from settings");
+    addSystemLog("INFO", "Bot initialized with Telegram token from settings");
+
+    process.env.TELEGRAM_TOKEN = row.botToken;
+
+  } else {
+
+    console.log("ℹ️ Using .env Telegram token");
+    addSystemLog("INFO", "Bot initialized with Telegram token from .env");
+
+  }
+  bot = new TelegramBot(
+    process.env.TELEGRAM_TOKEN,
+    { polling: true }
+  );
+
+  setTimeout(runPendingFollowUps, 5 * 1000);
+  setInterval(runPendingFollowUps, FOLLOW_UP_CHECK_INTERVAL_MS);
+
+  /* ===============================
    📥 CALLBACK HANDLER
 ================================ */
 bot.on("callback_query", (query) => {
@@ -128,7 +138,7 @@ bot.on("callback_query", (query) => {
           WHERE id = ?
         `, [id]);
 
-        bot.sendMessage(chatId, `
+        bot.sendMessage(query.message.chat.id, `
 ⚠️ NOT RECEIVED
 
 Please provide voicemail within 3 days.
@@ -163,19 +173,42 @@ Failure = auto approval.
         message_id: query.message.message_id
       }).catch(() => {});
 
-      bot.editMessageText(
+      const updatedCaption =
 `${status === "RECEIVED" ? "✅ RECEIVED" : "❌ NOT RECEIVED"}
+${reasonText ? "\nReason: " + reasonText : ""}
 
 Agent: ${row.agentName}
 Ref: ${row.transactionReference}
 Amount: ${row.amount}
+Customer: ${row.customerNumber}
 
-Confirmed By: ${username}`,
-        {
-          chat_id: query.message.chat.id,
-          message_id: query.message.message_id
-        }
-      ).catch(() => {});
+Confirmed By: ${username}`;
+
+if (row.imageLink) {
+
+  // 🔥 delete original photo message
+  bot.deleteMessage(
+    query.message.chat.id,
+    query.message.message_id
+  ).catch(() => {});
+
+  // 🔥 send clean confirmation message
+  bot.sendMessage(
+    query.message.chat.id,
+    updatedCaption
+  ).catch(() => {});
+
+} else {
+
+  bot.editMessageText(
+    updatedCaption,
+    {
+      chat_id: query.message.chat.id,
+      message_id: query.message.message_id
+    }
+  ).catch(() => {});
+
+}
     });
 
     return;
@@ -206,6 +239,59 @@ Confirmed By: ${username}`,
   /* ===============================
      💰 FINAL PENDING UPDATE
   ============================== */
+  if (action === "back") {
+    bot.answerCallbackQuery(query.id).catch(() => {});
+
+    return bot.editMessageReplyMarkup(getDepositAnswerKeyboard(id), {
+      chat_id: query.message.chat.id,
+      message_id: query.message.message_id
+    });
+  }
+
+  if (action === "yes" && reason !== "confirm") {
+    db.get(`SELECT * FROM transactions WHERE id=?`, [id], (err, row) => {
+      if (err || !row) {
+        return bot.answerCallbackQuery(query.id, {
+          text: "Data not found",
+          show_alert: true
+        });
+      }
+
+      if (["RECEIVED", "NOT RECEIVED", "For Review"].includes(row.agentStatus)) {
+        return bot.answerCallbackQuery(query.id, {
+          text: "This transaction is already closed for agent answer.",
+          show_alert: true
+        });
+      }
+
+      if (
+        row.telegramMessageId &&
+        String(row.telegramMessageId) !== String(query.message.message_id)
+      ) {
+        return bot.answerCallbackQuery(query.id, {
+          text: "This follow-up is already expired. Please answer the latest follow-up message.",
+          show_alert: true
+        });
+      }
+
+      bot.answerCallbackQuery(query.id, {
+        text: "Tap Confirm to mark this as received."
+      }).catch(() => {});
+
+      bot.editMessageReplyMarkup({
+        inline_keyboard: [[
+          { text: "Back", callback_data: `back_${id}` },
+          { text: "Confirm", callback_data: `yes_${id}_confirm` }
+        ]]
+      }, {
+        chat_id: query.message.chat.id,
+        message_id: query.message.message_id
+      }).catch(() => {});
+    });
+
+    return;
+  }
+
   if (type === "pending") {
 
     db.get(`SELECT * FROM transactions WHERE id=?`, [id], (err, row) => {
@@ -223,6 +309,25 @@ if (!row) {
     show_alert: true
   });
 }
+
+      if (
+        ["RECEIVED", "NOT RECEIVED", "For Review"].includes(row.agentStatus)
+      ) {
+        return bot.answerCallbackQuery(query.id, {
+          text: "This transaction is already closed for agent answer.",
+          show_alert: true
+        });
+      }
+
+      if (
+        row.telegramMessageId &&
+        String(row.telegramMessageId) !== String(query.message.message_id)
+      ) {
+        return bot.answerCallbackQuery(query.id, {
+          text: "This follow-up is already expired. Please answer the latest follow-up message.",
+          show_alert: true
+        });
+      }
 
       const map = {
         amount: "Wrong Amount",
@@ -247,7 +352,7 @@ if (!row) {
       }).catch(() => {});
 
       // ✅ update message
-      bot.editMessageText(
+const updatedCaption =
 `${status === "RECEIVED" ? "✅ RECEIVED" : "❌ NOT RECEIVED"}
 ${reasonText ? "\nReason: " + reasonText : ""}
 
@@ -256,18 +361,670 @@ Ref: ${row.transactionReference}
 Amount: ${row.amount}
 Customer: ${row.customerNumber}
 
-Confirmed By: ${username}`,
-        {
-          chat_id: query.message.chat.id,
-          message_id: query.message.message_id
-        }
-      ).catch(() => {});
+Confirmed By: ${username}`;
+
+if (row.imageLink) {
+
+  // 🔥 delete original photo message
+  bot.deleteMessage(
+    query.message.chat.id,
+    query.message.message_id
+  ).catch(() => {});
+
+  // 🔥 send clean confirmation message
+  bot.sendMessage(
+    query.message.chat.id,
+    updatedCaption
+  ).catch(() => {});
+
+} else {
+
+  bot.editMessageText(
+    updatedCaption,
+    {
+      chat_id: query.message.chat.id,
+      message_id: query.message.message_id
+    }
+  ).catch(() => {});
+
+}
     });
 
     return;
   }
 
 });
+
+// 🎤 voice (recorded in Telegram)
+bot.on("voice", async (msg) => {
+  await handleVoicemail(msg, msg.voice.file_id);
+});
+
+bot.on("audio", async (msg) => {
+  await handleVoicemail(msg, msg.audio.file_id);
+});
+
+bot.on("document", async (msg) => {
+  const fileId = msg.document.file_id;
+  const fileSize = msg.document.file_size;
+  const chatId = msg.chat.id;
+
+  //  ignore unrelated uploads
+if (!msg.reply_to_message) {
+  return;
+}
+
+  if (fileSize > 20 * 1024 * 1024) {
+    return bot.sendMessage(
+  chatId,
+  "❌ File too large.\n\nMax allowed: 20MB\nPlease compress your audio."
+).catch(err => {
+  console.log("⚠️ Telegram rate limit:", err.message);
+});
+  }
+
+  // 🔥 VALIDATE AUDIO FILE
+const isAudioFile =
+  msg.document.mime_type?.startsWith("audio/") ||
+
+  /\.(mp3|wav|ogg|m4a)$/i.test(
+    msg.document.file_name || ""
+  );
+
+if (!isAudioFile) {
+
+  if (!msg.reply_to_message) return;
+
+  return bot.sendMessage(
+    chatId,
+    "❌ Invalid file type.\n\nPlease send a real audio file."
+  ).catch(err => {
+    console.log("⚠️ Telegram rate limit:", err.message);
+  });
+}
+
+await handleVoicemail(msg, fileId);
+});
+
+bot.on("message", async (msg) => {
+
+  console.log("========== RECEIVED MESSAGE ==========");
+  console.log(JSON.stringify(msg, null, 2));
+  console.log("======================================");
+
+  if (await handleManualAgentStatusMessage(msg)) return;
+
+  const chatId = String(msg.chat.id).replace(".0", "");
+  const groupName = (msg.chat.title || "PRIVATE").trim();
+
+  console.log("📩 AUTO DETECT:");
+  console.log("CHAT ID:", chatId);
+  console.log("GROUP:", groupName);
+
+  db.get(`
+    SELECT id FROM chat_ids WHERE groupName = ?
+  `, [groupName], (err, row) => {
+
+    if (!row) {
+      db.run(`
+        INSERT INTO chat_ids (agentName, groupName, chatId)
+        VALUES (?, ?, ?)
+      `, ["AUTO", groupName, chatId]);
+
+      console.log("✅ NEW GROUP SAVED");
+    } else {
+      console.log("ℹ️ Group already exists → updating chatId");
+
+      // 🔥 OPTIONAL: update chatId if changed
+      db.run(`
+        UPDATE chat_ids
+        SET chatId = ?
+        WHERE groupName = ?
+      `, [chatId, groupName]);
+    }
+});
+});
+
+async function handleManualAgentStatusMessage(msg) {
+  const parserSettings = await getManualReplyParserSettings();
+  const parsed = parseManualAgentStatus(msg.text || msg.caption || "", parserSettings);
+  if (!parsed) return false;
+
+  try {
+    const replyMessageId = msg.reply_to_message?.message_id;
+    const replyMatch = replyMessageId
+      ? await findManualReplyTransactionByMessage(replyMessageId)
+      : null;
+    const referenceMatch = replyMatch ? null : await findManualReplyTransactionByReference(parsed);
+    const row = replyMatch || referenceMatch?.row || null;
+
+    if (!row) {
+      addSystemLog("WARN", `Manual agent reply not matched (ref ${parsed.reference || "-"}, reply ${replyMessageId || "-"}, status ${parsed.rawStatus})`);
+      return false;
+    }
+
+    const username = msg.from?.username || msg.from?.first_name || msg.chat?.title || "manual_reply";
+
+    await dbRun(`
+      UPDATE transactions
+      SET agentStatus = ?,
+          confirmedBy = ?,
+          reason = ?,
+          confirmedAt = datetime('now')
+      WHERE id = ?
+    `, [parsed.status, username, parsed.reason, row.id]);
+
+    await disablePendingButtons(row, `Answered by agent: ${parsed.rawStatus}`);
+
+    getIO()?.emit("update", {
+      id: row.id,
+      status: parsed.status,
+      username,
+      reason: parsed.reason,
+      confirmedAt: new Date().toISOString(),
+      sent: 1,
+      type: "pending"
+    });
+
+    if (replyMatch) {
+      addSystemLog("INFO", `Manual agent reply matched by Telegram reply message ${replyMessageId} for transaction ${row.id}`);
+    } else if (!referenceMatch?.strongMatch) {
+      addSystemLog("WARN", `Manual agent reply used reference-only match for transaction ${row.id} (${parsed.reference}); reply details may differ from pending row`);
+    }
+
+    addSystemLog("INFO", `Manual agent reply updated transaction ${row.id} (${row.transactionReference}) to ${parsed.status}`);
+
+    bot.sendMessage(
+      msg.chat.id,
+      `✅ Updated ${row.transactionReference} to ${parsed.status}`
+    ).catch(() => {});
+
+    return true;
+  } catch (err) {
+    console.error("MANUAL AGENT REPLY ERROR:", err.message);
+    addSystemLog("ERROR", `Manual agent reply failed: ${err.message}`);
+    return false;
+  }
+}
+
+async function findManualReplyTransactionByMessage(messageId) {
+  return dbGet(`
+    SELECT *
+    FROM transactions
+    WHERE telegramMessageId = ?
+      AND (actionStatus IS NULL OR actionStatus = 'PENDING')
+      AND (
+        agentStatus IS NULL
+        OR agentStatus = ''
+        OR agentStatus = 'PENDING'
+        OR agentStatus IN ('1st FF', '2nd FF', 'Final FF')
+      )
+    ORDER BY id DESC
+    LIMIT 1
+  `, [String(messageId)]);
+}
+
+async function findManualReplyTransactionByReference(parsed) {
+  if (!parsed.reference) return null;
+
+  const candidates = await dbAll(`
+    SELECT *
+    FROM transactions
+    WHERE UPPER(transactionReference) = ?
+      AND (actionStatus IS NULL OR actionStatus = 'PENDING')
+      AND (
+        agentStatus IS NULL
+        OR agentStatus = ''
+        OR agentStatus = 'PENDING'
+        OR agentStatus IN ('1st FF', '2nd FF', 'Final FF')
+      )
+    ORDER BY id DESC
+    LIMIT 20
+  `, [parsed.reference]);
+
+  const exactMatches = candidates.filter(transaction =>
+    cleanManualRef(transaction.transactionReference) === parsed.reference
+  );
+
+  const strongMatch = exactMatches.find(transaction => {
+    const amountMatches = parsed.amount === null || Number(transaction.amount) === parsed.amount;
+    const walletMatches = !parsed.agentNumber || walletMatchesManualReply(transaction.agentNumber, parsed.agentNumber);
+    const shopMatches = !parsed.shopName || cleanManualText(transaction.agentName).includes(parsed.shopName);
+
+    return amountMatches && walletMatches && shopMatches;
+  });
+
+  const row = strongMatch || (exactMatches.length === 1 ? exactMatches[0] : null);
+
+  return row ? { row, strongMatch: Boolean(strongMatch) } : null;
+}
+
+function parseManualAgentStatus(text, settings = DEFAULT_MANUAL_REPLY_PARSER) {
+  const value = String(text || "").trim();
+  if (!value) return null;
+
+  const parser = normalizeManualReplyParser(settings);
+  const reference = cleanManualRef(getManualField(value, parser.referenceLabels));
+  const rawStatus = getManualField(value, parser.statusLabels);
+  const statusText = String(rawStatus || "").trim();
+
+  if (!statusText) return null;
+
+  const normalizedStatus = statusText.replace(/\s+/g, " ").trim().toUpperCase();
+  let status = null;
+  const hasKeyword = (keywords) => keywords.some(keyword => {
+    const normalizedKeyword = cleanManualText(keyword);
+    if (!normalizedKeyword) return false;
+    return new RegExp(`(^|\\b)${escapeRegExp(normalizedKeyword)}(\\b|$)`, "i").test(normalizedStatus);
+  });
+
+  if (hasKeyword(parser.notReceivedKeywords)) {
+    status = "NOT RECEIVED";
+  }
+
+  if (!status && hasKeyword(parser.receivedKeywords)) {
+    status = "RECEIVED";
+  }
+
+  if (!status) return null;
+
+  return {
+    reference,
+    status,
+    rawStatus: statusText,
+    reason: statusText,
+    amount: parseManualAmount(getManualField(value, parser.amountLabels)),
+    agentNumber: cleanManualWallet(getManualField(value, parser.agentNumberLabels)),
+    shopName: cleanManualText(getManualField(value, parser.shopLabels))
+  };
+}
+
+async function getManualReplyParserSettings() {
+  const row = await new Promise((resolve) => {
+    db.get(`
+      SELECT manualReplyParser
+      FROM settings
+      WHERE id = 1
+      LIMIT 1
+    `, (err, settings) => resolve(err ? null : settings));
+  });
+
+  return normalizeManualReplyParser(row?.manualReplyParser);
+}
+
+function normalizeManualReplyParser(value) {
+  let parser = value;
+
+  if (typeof value === "string" && value.trim()) {
+    try {
+      parser = JSON.parse(value);
+    } catch (err) {
+      parser = {};
+    }
+  }
+
+  if (!parser || typeof parser !== "object") parser = {};
+
+  const normalizeList = (key) => {
+    const source = Array.isArray(parser[key])
+      ? parser[key]
+      : String(parser[key] || "").split(",");
+    const values = source.map(item => String(item || "").trim()).filter(Boolean);
+    return values.length ? values : DEFAULT_MANUAL_REPLY_PARSER[key];
+  };
+
+  return {
+    shopLabels: normalizeList("shopLabels"),
+    agentNumberLabels: normalizeList("agentNumberLabels"),
+    amountLabels: normalizeList("amountLabels"),
+    referenceLabels: normalizeList("referenceLabels"),
+    statusLabels: normalizeList("statusLabels"),
+    receivedKeywords: normalizeList("receivedKeywords"),
+    notReceivedKeywords: normalizeList("notReceivedKeywords")
+  };
+}
+
+function getManualField(text, labels) {
+  for (const label of labels) {
+    const pattern = new RegExp(`^\\s*${escapeRegExp(label)}\\s*:\\s*(.+?)\\s*$`, "im");
+    const match = String(text || "").match(pattern);
+    if (match) return match[1].trim();
+  }
+
+  return "";
+}
+
+function cleanManualRef(value) {
+  return String(value || "").trim().toUpperCase().replace(/^="?|"?$/g, "").replace(/[^A-Z0-9]/g, "");
+}
+
+function cleanManualWallet(value) {
+  return String(value || "").trim().replace(/^="?|"?$/g, "").replace(/\D/g, "");
+}
+
+function cleanManualText(value) {
+  return String(value || "").trim().toUpperCase().replace(/\s+/g, " ");
+}
+
+function parseManualAmount(value) {
+  const amount = Number(String(value || "").replace(/[^\d.-]/g, ""));
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
+function walletMatchesManualReply(transactionWallet, replyWallet) {
+  const transactionVariants = walletVariantsManualReply(transactionWallet);
+  const replyVariants = walletVariantsManualReply(replyWallet);
+  return transactionVariants.some(wallet => replyVariants.includes(wallet));
+}
+
+function walletVariantsManualReply(value) {
+  const wallet = cleanManualWallet(value);
+  if (!wallet) return [];
+
+  const variants = new Set([wallet]);
+  const withoutLeadingZeroes = wallet.replace(/^0+/, "");
+
+  if (withoutLeadingZeroes) variants.add(withoutLeadingZeroes);
+  if (wallet.length > 10) variants.add(wallet.slice(-10));
+
+  return [...variants];
+}
+
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+});
+
+const { transcribeAndTranslate } = require("./helpers/transcribe");
+
+
+/* ===============================
+   📤 SEND TELEGRAM (PENDING)
+================================ */
+function buildPendingMessage(data, options = {}) {
+  const followUpCount = Number(data.followUpCount || 0);
+  const followUpLabel = followUpMessageLabels[followUpCount];
+  const messageLines = [];
+  const selectedFields = normalizePendingMessageFields(options.fields);
+  const customMessage = String(options.messageText || "").trim();
+
+  if (followUpLabel) {
+    messageLines.push(`${followUpLabel} Follow Up`);
+  }
+
+  if (followUpCount === MAX_FOLLOW_UPS) {
+    messageLines.push(
+      "Since you failed to answer after multiple consecutive follow-ups, this is the last follow-up. If you still fail to answer, it will auto credit and be added to your report. Thanks."
+    );
+    messageLines.push("");
+  }
+
+  if (options.remark) {
+    messageLines.push(`Remark: ${options.remark}`);
+    messageLines.push("");
+  }
+
+  messageLines.push("Deposit");
+
+  if (customMessage) {
+    messageLines.push("Message:");
+    messageLines.push(escapeTelegramHtml(customMessage));
+    messageLines.push("");
+  }
+
+  if (selectedFields.includes("agent")) {
+    messageLines.push(`Agent: ${escapeTelegramHtml(data.agentName || "")}`);
+  }
+
+  if (selectedFields.includes("ref")) {
+    messageLines.push(`Ref: ${escapeTelegramHtml(data.transactionReference || "")}`);
+  }
+
+  if (selectedFields.includes("amount")) {
+    messageLines.push(`Amount: ${escapeTelegramHtml(data.amount || "")}`);
+  }
+
+  if (selectedFields.includes("customer")) {
+    messageLines.push(`Customer: ${escapeTelegramHtml(data.customerNumber || "")}`);
+  }
+
+  if (selectedFields.includes("image") && data.imageLink) {
+    if (options.imageFormat === "url") {
+      messageLines.push(`Image: ${escapeTelegramHtml(data.imageLink)}`);
+    } else {
+      const imageLabel = escapeTelegramHtml(options.imageLabel || "View Receipt");
+      messageLines.push(`Image: <a href="${escapeTelegramHtml(data.imageLink)}">${imageLabel}</a>`);
+    }
+  }
+
+  return messageLines.join("\n");
+}
+
+function escapeTelegramHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function normalizePendingMessageFields(fields) {
+  const allowedFields = new Set(DEFAULT_PENDING_MESSAGE_FIELDS);
+
+  if (Array.isArray(fields)) {
+    return fields
+      .map(field => String(field || "").trim())
+      .filter(field => allowedFields.has(field));
+  }
+
+  if (typeof fields === "string" && fields.trim()) {
+    try {
+      return normalizePendingMessageFields(JSON.parse(fields));
+    } catch (err) {
+      return normalizePendingMessageFields(fields.split(","));
+    }
+  }
+
+  return DEFAULT_PENDING_MESSAGE_FIELDS;
+}
+
+function getDepositAnswerKeyboard(id) {
+  return {
+    inline_keyboard: [[
+      { text: "YES", callback_data: `yes_${id}` },
+      { text: "NO", callback_data: `no_${id}_select` }
+    ]]
+  };
+}
+
+async function sendTelegram(data) {
+  try {
+    const followUpCount = Number(data.followUpCount || 0);
+    const messageOptions = data.messageOptions || {};
+    const replyMarkup = getDepositAnswerKeyboard(data.id);
+
+    const messageText = buildPendingMessage(data, messageOptions);
+    const msg = await bot.sendMessage(
+      data.chatId,
+      messageText,
+      {
+        parse_mode: "HTML",
+        disable_web_page_preview: !messageOptions.imagePreview,
+        reply_markup: replyMarkup
+      }
+    );
+
+    if (data.id) {
+      db.run(`
+        UPDATE transactions
+        SET
+          sent = 1,
+          chatId = ?,
+          telegramMessageId = ?,
+          followUpCount = CASE
+            WHEN ? > 0 THEN ?
+            ELSE followUpCount
+          END,
+          agentStatus = CASE
+            WHEN ? = 1 THEN '1st FF'
+            WHEN ? = 2 THEN '2nd FF'
+            WHEN ? = 3 THEN 'Final FF'
+            ELSE agentStatus
+          END,
+          lastFollowUpAt = CASE
+            WHEN ? = 0 THEN datetime('now')
+            ELSE COALESCE(lastFollowUpAt, datetime('now'))
+          END
+        WHERE id = ?
+      `, [
+        String(data.chatId),
+        String(msg.message_id),
+        followUpCount,
+        followUpCount,
+        followUpCount,
+        followUpCount,
+        followUpCount,
+        followUpCount,
+        data.id
+      ]);
+    }
+
+    return msg;
+
+  } catch (err) {
+
+    console.error("TELEGRAM ERROR:", err.message);
+    addSystemLog("ERROR", `Pending Telegram send failed (ID ${data.id || "-"}, agent ${data.agentName || "-"}): ${err.message}`);
+
+    return null;
+  }
+}
+
+/* ===============================
+   SEND TELEGRAM (VIDEO)
+================================ */
+async function sendVideoTelegram(data) {
+  const message = `🎥 Video Case
+
+Agent: ${data.agentName}
+Ref: ${data.transactionReference}
+Amount: ${data.amount}
+
+Video: ${data.imageLink}`;
+
+  try {
+    // 🔥 IMPORTANT: capture the sent message
+    const msg = await bot.sendMessage(data.chatId, message, {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: "✅ RECEIVED", callback_data: `video_yes_${data.id}` },
+          { text: "❌ NOT RECEIVED", callback_data: `video_no_${data.id}` }
+        ]]
+      }
+    });
+
+    console.log("📤 VIDEO SENT:", data.id, "MSG ID:", msg.message_id);
+
+    // 🔥 SAVE message_id to DB
+    db.run(`
+      UPDATE video_cases
+      SET telegramMessageId = ?
+      WHERE id = ?
+    `, [msg.message_id, data.id]);
+
+  } catch (err) {
+    console.error("❌ VIDEO SEND ERROR:", err.message);
+    addSystemLog("ERROR", `Video Telegram send failed (ID ${data.id || "-"}): ${err.message}`);
+  }
+}
+
+async function sendWalletHealthTelegram(data) {
+  const rows = data.rows || [];
+  const isAppUpdateNotice = data.messageType === "app_update";
+
+  const lines = [
+    isAppUpdateNotice ? "Wallet App Update Required" : "Wallet Health Report",
+    ""
+  ];
+
+  if (isAppUpdateNotice) {
+    lines.push(
+      `Agent Group: ${data.agentGroup || "-"}`,
+      `Latest App Ver: ${data.latestVersion || "-"}`,
+      "",
+      "Please install/update to the latest wallet app, then confirm after installation.",
+      ""
+    );
+  }
+
+  rows.forEach((row, index) => {
+    if (index > 0) lines.push("");
+
+    if (isAppUpdateNotice) {
+      lines.push(
+        `Owner: ${row.ownerName || "-"}`,
+        `Number: ${row.walletId || "-"}`,
+        `Current App Ver: ${row.appVersion || "-"}`,
+        `Device: ${row.deviceName || "-"}`
+      );
+    } else {
+      lines.push(
+        `Owner: ${row.ownerName || "-"}`,
+        `Number: ${row.walletId || "-"}`,
+        `Condition: ${row.appCondition || "-"}`,
+        `Permission: ${getPermissionIssues(row)}`,
+        `App Ver: ${row.appVersion || "-"}`
+      );
+    }
+  });
+
+  for (const chunk of splitTelegramMessage(lines.join("\n"))) {
+    await bot.sendMessage(data.chatId, chunk);
+  }
+
+  return true;
+}
+
+function normalizeHealth(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function getPermissionIssues(row) {
+  const issues = [];
+
+  if (!isAllowed(row.smsPermission)) issues.push("Allow SMS");
+  if (!isAllowed(row.notificationListener)) issues.push("Allow Listener");
+  if (!isAllowed(row.appNotifications)) issues.push("Allow App Notif");
+  if (!isAllowed(row.fullScreenAlert)) issues.push("Allow Full Screen");
+  if (!isAllowed(row.batteryOptimizationDisabled)) issues.push("Allow Battery");
+
+  return issues.length ? issues.join(", ") : "OK";
+}
+
+function isAllowed(value) {
+  const normalized = normalizeHealth(value);
+  return normalized === "YES" || normalized === "Y" || normalized === "TRUE" || normalized === "1";
+}
+
+function splitTelegramMessage(message) {
+  const maxLength = 3900;
+  const lines = message.split("\n");
+  const chunks = [];
+  let chunk = "";
+
+  lines.forEach(line => {
+    if ((chunk + "\n" + line).length > maxLength) {
+      chunks.push(chunk);
+      chunk = line;
+      return;
+    }
+
+    chunk = chunk ? `${chunk}\n${line}` : line;
+  });
+
+  if (chunk) chunks.push(chunk);
+  return chunks;
+}
 
 // ===============================
 // 🔧 HELPER FUNCTION
@@ -300,8 +1057,8 @@ async function handleVoicemail(msg, fileId) {
   console.log("🎤 VOICEMAIL RECEIVED");
 
   if (!replyMsgId) {
-    return bot.sendMessage(chatId, "⚠️ Please reply to the video message.");
-  }
+  return;
+}
 
   const file = await bot.getFile(fileId);
 
@@ -310,7 +1067,7 @@ async function handleVoicemail(msg, fileId) {
     return;
   }
 
-  const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_TOKEN}/${file.file_path}`;
+  const fileUrl = `https://api.telegram.org/file/bot${bot.token}/${file.file_path}`;
 
   let row = await new Promise((resolve) => {
     db.get(`
@@ -359,61 +1116,278 @@ async function handleVoicemail(msg, fileId) {
   bot.sendMessage(chatId, "✅ Voicemail linked successfully.");
 }
 
-// 🎤 voice (recorded in Telegram)
-bot.on("voice", async (msg) => {
-  await handleVoicemail(msg, msg.voice.file_id);
-});
+function dbAll(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => err ? reject(err) : resolve(rows || []));
+  });
+}
 
-bot.on("audio", async (msg) => {
-  await handleVoicemail(msg, msg.audio.file_id);
-});
+function dbRun(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) reject(err);
+      else resolve(this);
+    });
+  });
+}
 
-bot.on("document", async (msg) => {
-  const fileId = msg.document.file_id;
-  const fileSize = msg.document.file_size;
-  const chatId = msg.chat.id;
+function minutesFromTime(value) {
+  const match = String(value || "").match(/^(\d{2}):(\d{2})$/);
+  if (!match) return null;
 
-  if (fileSize > 20 * 1024 * 1024) {
-    return bot.sendMessage(chatId,
-      "❌ File too large.\n\nMax allowed: 20MB\nPlease compress your audio."
-    );
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+
+  if (hours > 23 || minutes > 59) return null;
+  return (hours * 60) + minutes;
+}
+
+function isWithinFollowUpWindow(startTime, endTime) {
+  const start = minutesFromTime(startTime);
+  const end = minutesFromTime(endTime);
+
+  if (start === null || end === null || start === end) return true;
+
+  const now = new Date();
+  const current = (now.getHours() * 60) + now.getMinutes();
+
+  if (start < end) {
+    return current >= start && current < end;
   }
 
-  await handleVoicemail(msg, fileId);
-});
+  return current >= start || current < end;
+}
 
-bot.on("message", (msg) => {
-  const chatId = String(msg.chat.id).replace(".0", "");
-  const groupName = (msg.chat.title || "PRIVATE").trim();
+function parseFollowUpExcludedAgents(value) {
+  return String(value || "")
+    .split(/[\n,]+/)
+    .map(item => item.trim().toUpperCase())
+    .filter(Boolean);
+}
 
-  console.log("📩 AUTO DETECT:");
-  console.log("CHAT ID:", chatId);
-  console.log("GROUP:", groupName);
+function isFollowUpAgentExcluded(agentName, excludedAgents = []) {
+  const normalizedAgent = String(agentName || "").trim().toUpperCase();
+  if (!normalizedAgent) return false;
 
-  db.get(`
-    SELECT id FROM chat_ids WHERE groupName = ?
-  `, [groupName], (err, row) => {
+  return excludedAgents.some(excludedAgent =>
+    normalizedAgent.includes(excludedAgent)
+  );
+}
 
-    if (!row) {
-      db.run(`
-        INSERT INTO chat_ids (agentName, groupName, chatId)
-        VALUES (?, ?, ?)
-      `, ["AUTO", groupName, chatId]);
+async function getFollowUpSettings() {
+  const rows = await dbAll(`
+    SELECT
+      followUpIntervalMinutes,
+      followUpEnabled,
+      followUpStartTime,
+      followUpEndTime,
+      followUpMessageText,
+      followUpMessageFields,
+      followUpDeletePrevious,
+      followUpImagePreview,
+      followUpImageFormat,
+      followUpExcludedAgents
+    FROM settings
+    WHERE id = 1
+    LIMIT 1
+  `);
 
-      console.log("✅ NEW GROUP SAVED");
-    } else {
-      console.log("ℹ️ Group already exists → updating chatId");
+  const settings = rows[0] || {};
+  const value = Number(settings.followUpIntervalMinutes);
 
-      // 🔥 OPTIONAL: update chatId if changed
-      db.run(`
-        UPDATE chat_ids
-        SET chatId = ?
-        WHERE groupName = ?
-      `, [chatId, groupName]);
+  const intervalMinutes = (!Number.isFinite(value) || value < 1)
+    ? DEFAULT_FOLLOW_UP_INTERVAL_MINUTES
+    : Math.floor(value);
+
+  return {
+    enabled: Number(settings.followUpEnabled ?? 1) === 1,
+    intervalMinutes,
+    withinSchedule: isWithinFollowUpWindow(
+      settings.followUpStartTime,
+      settings.followUpEndTime
+    ),
+    deletePrevious: Number(settings.followUpDeletePrevious || 0) === 1,
+    excludedAgents: parseFollowUpExcludedAgents(settings.followUpExcludedAgents),
+    messageOptions: {
+      messageText: settings.followUpMessageText || "",
+      fields: normalizePendingMessageFields(settings.followUpMessageFields),
+      imagePreview: Number(settings.followUpImagePreview || 0) === 1,
+      imageFormat: settings.followUpImageFormat === "url" ? "url" : "link"
     }
+  };
+}
 
+function disablePendingButtons(row, reason = "Failed to answer") {
+  if (!row.chatId || !row.telegramMessageId) return Promise.resolve();
+
+  return bot.editMessageText(
+    buildPendingMessage(row, { remark: reason }),
+    {
+    chat_id: row.chatId,
+    message_id: row.telegramMessageId,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    reply_markup: { inline_keyboard: [] }
+  }).catch(() => {
+    return bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+      chat_id: row.chatId,
+      message_id: row.telegramMessageId
+    });
+  }).catch((err) => {
+    console.log("FOLLOW-UP DISABLE ERROR:", err.message);
+    addSystemLog("WARN", `Could not disable previous follow-up buttons (transaction ${row.id}, message ${row.telegramMessageId}): ${err.message}`);
+  });
+}
+
+function deletePendingMessage(row) {
+  if (!row.chatId || !row.telegramMessageId) return Promise.resolve();
+
+  return bot.deleteMessage(row.chatId, row.telegramMessageId).catch((err) => {
+    addSystemLog("WARN", `Could not delete previous follow-up message (transaction ${row.id}, message ${row.telegramMessageId}): ${err.message}`);
+    return disablePendingButtons(row, "Failed to answer");
+  });
+}
+
+function deleteTelegramMessage(chatId, messageId) {
+  if (!bot || !chatId || !messageId) return Promise.resolve(false);
+
+  return bot.deleteMessage(chatId, messageId)
+    .then(() => true)
+    .catch((err) => {
+      addSystemLog("WARN", `Could not delete Telegram message ${messageId} in chat ${chatId}: ${err.message}`);
+      return false;
+    });
+}
+
+async function sendFollowUp(row, nextCount, messageOptions = {}) {
+  const msg = await sendTelegram({
+    chatId: row.chatId,
+    id: row.id,
+    transactionReference: row.transactionReference,
+    amount: row.amount,
+    agentName: row.agentName,
+    customerNumber: row.customerNumber,
+    imageLink: row.imageLink,
+    followUpCount: nextCount,
+    messageOptions
   });
 
-});
+  if (!msg) return false;
 
-module.exports = { sendTelegram, sendVideoTelegram, bot };
+  await dbRun(`
+    UPDATE transactions
+    SET
+      agentStatus = ?,
+      reason = 'Failed to answer',
+      followUpCount = ?,
+      lastFollowUpAt = datetime('now'),
+      chatId = ?,
+      telegramMessageId = ?
+    WHERE id = ?
+  `, [
+    followUpLabels[nextCount],
+    nextCount,
+    String(row.chatId),
+    String(msg.message_id),
+    row.id
+  ]);
+
+  getIO()?.emit("update", {
+    id: row.id,
+    status: followUpLabels[nextCount],
+    reason: "Failed to answer",
+    sent: 1,
+    type: "pending"
+  });
+
+  addSystemLog("INFO", `Follow-up sent (${followUpLabels[nextCount]}) for transaction ${row.id}, ref ${row.transactionReference}`);
+
+  return true;
+}
+
+async function markForReview(row) {
+  await disablePendingButtons(row, "Failed to answer final follow-up");
+
+  await dbRun(`
+    UPDATE transactions
+    SET
+      agentStatus = 'For Review',
+      reason = 'Failed to answer final follow-up',
+      lastFollowUpAt = datetime('now')
+    WHERE id = ?
+  `, [row.id]);
+
+  getIO()?.emit("update", {
+    id: row.id,
+    status: "For Review",
+    reason: "Failed to answer final follow-up",
+    sent: 1,
+    type: "pending"
+  });
+
+  addSystemLog("WARN", `Transaction moved to For Review after final follow-up expired (ID ${row.id}, ref ${row.transactionReference})`);
+}
+
+async function runPendingFollowUps() {
+  if (!bot || followUpRunning) return;
+
+  followUpRunning = true;
+
+  try {
+    const followUpSettings = await getFollowUpSettings();
+
+    if (!followUpSettings.enabled || !followUpSettings.withinSchedule) {
+      return;
+    }
+
+    const intervalSql = `-${followUpSettings.intervalMinutes} minutes`;
+
+    const rows = await dbAll(`
+      SELECT *
+      FROM transactions
+      WHERE sent = 1
+        AND (actionStatus IS NULL OR actionStatus = 'PENDING')
+        AND (
+          agentStatus IS NULL
+          OR agentStatus = ''
+          OR agentStatus = 'PENDING'
+          OR agentStatus IN ('1st FF', '2nd FF', 'Final FF')
+        )
+        AND chatId IS NOT NULL
+        AND telegramMessageId IS NOT NULL
+        AND datetime(COALESCE(lastFollowUpAt, createdAt)) <= datetime('now', ?)
+      ORDER BY id ASC
+      LIMIT 25
+    `, [intervalSql]);
+
+    for (const row of rows) {
+      if (isFollowUpAgentExcluded(row.agentName, followUpSettings.excludedAgents)) {
+        continue;
+      }
+
+      const currentCount = Number(row.followUpCount || 0);
+
+      if (currentCount >= MAX_FOLLOW_UPS) {
+        await markForReview(row);
+        continue;
+      }
+
+      const nextCount = currentCount + 1;
+
+      if (followUpSettings.deletePrevious) {
+        await deletePendingMessage(row);
+      } else {
+        await disablePendingButtons(row, "Failed to answer");
+      }
+
+      await sendFollowUp(row, nextCount, followUpSettings.messageOptions);
+    }
+  } catch (err) {
+    console.error("FOLLOW-UP ERROR:", err.message);
+    addSystemLog("ERROR", `Pending follow-up scheduler failed: ${err.message}`);
+  } finally {
+    followUpRunning = false;
+  }
+}
+
+module.exports = { sendTelegram, sendVideoTelegram, sendWalletHealthTelegram, deleteTelegramMessage, bot };
