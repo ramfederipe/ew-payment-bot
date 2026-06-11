@@ -167,7 +167,9 @@ db.run(`
 
     remarks TEXT,
 
-    createdAt TEXT DEFAULT CURRENT_TIMESTAMP
+    createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+
+    uploadedAt TEXT
 
   )
 `);
@@ -192,6 +194,16 @@ db.run(`
   ON wallets(accountType)
 `);
 
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_transactions_deposit_ref
+  ON transactions(depositId, transactionReference)
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_video_cases_deposit_ref
+  ON video_cases(depositId, transactionReference)
+`);
+
 db.all(`PRAGMA table_info(wallets)`, (err, rows) => {
   if (err) {
     console.error("Wallet migration error:", err);
@@ -212,6 +224,14 @@ db.all(`PRAGMA table_info(wallets)`, (err, rows) => {
         SET openingBalance = COALESCE(balance, 0)
         WHERE openingBalance IS NULL OR openingBalance = 0
       `);
+    });
+  }
+
+  if (!columns.includes("uploadedAt")) {
+    db.run(`ALTER TABLE wallets ADD COLUMN uploadedAt TEXT`, (err) => {
+      if (err) {
+        console.error("Failed to add wallet uploadedAt:", err);
+      }
     });
   }
 });
@@ -578,7 +598,8 @@ db.run(`
     settlementDateColumn TEXT DEFAULT 'Date',
     balanceCalculationSettings TEXT,
     walletTypes TEXT,
-    balanceTodaySource TEXT DEFAULT 'upload'
+    balanceTodaySource TEXT DEFAULT 'upload',
+    formatTransactionAmounts INTEGER DEFAULT 1
   )
 `);
 
@@ -757,6 +778,13 @@ db.all(`PRAGMA table_info(settings)`, (err, rows) => {
       sql: `
         ALTER TABLE settings
         ADD COLUMN balanceTodaySource TEXT DEFAULT 'upload'
+      `
+    },
+    {
+      name: "formatTransactionAmounts",
+      sql: `
+        ALTER TABLE settings
+        ADD COLUMN formatTransactionAmounts INTEGER DEFAULT 1
       `
     }
   ];

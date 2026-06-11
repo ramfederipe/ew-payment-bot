@@ -190,8 +190,8 @@ if (mode === "video") {
     db.get(`
       SELECT *
       FROM video_cases
-      WHERE depositId = ?
-      AND transactionReference = ?
+      WHERE TRIM(COALESCE(depositId, '')) = ?
+      AND TRIM(COALESCE(transactionReference, '')) = ?
     `,
     [cleanDepositId, cleanRef],
     (err, row) => resolve(row));
@@ -211,9 +211,10 @@ if (mode === "video") {
     db.get(`
       SELECT *
       FROM transactions
-      WHERE transactionReference = ?
+      WHERE TRIM(COALESCE(depositId, '')) = ?
+      AND TRIM(COALESCE(transactionReference, '')) = ?
     `,
-    [cleanRef],
+    [cleanDepositId, cleanRef],
     (err, row) => resolve(row));
 
   });
@@ -224,6 +225,9 @@ if (mode === "video") {
     // 🔁 EXISTING HANDLING (MAIN ONLY)
     // =========================
     if (existing) {
+      console.log("SKIP (ALREADY SYNCED PAIR):", cleanDepositId, cleanRef);
+      continue;
+
       if (existing.actionStatus === "APPROVED") {
         console.log("⏭️ SKIP (APPROVED):", cleanRef);
         continue;

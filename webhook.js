@@ -5,7 +5,16 @@ const session = require("express-session");
 const { requireAuth, requirePermission, requireAnyPermission } = require("./middleware/auth");
 const bcrypt = require("bcrypt");
 const { decryptAES, generateMark } = require("./crypto");
-const { sendTelegram, sendVideoTelegram, sendWalletHealthTelegram, deleteTelegramMessage, bot } = require("./bot");
+const {
+  sendTelegram,
+  sendVideoTelegram,
+  sendWalletHealthTelegram,
+  sendBalanceOverviewTelegram,
+  sendBalanceOverviewImageTelegram,
+  deleteTelegramMessage,
+  getBot,
+  initializeBotFromSettings
+} = require("./bot");
 const db = require("./db");
 const now = new Date().toISOString();
 const { updateStatusByRef } = require("./gsheet");
@@ -40,7 +49,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "12mb" }));
 
 const { syncSheets } = require("./sync");
 const { getIO } = require("./socket");
@@ -84,6 +93,10 @@ function normalizeSheetKey(value) {
 
 function normalizeSheetHeader(value) {
   return normalizeSheetKey(value).replace(/[^A-Z0-9]/g, "");
+}
+
+function makeSettlementKey(ownerName, walletType) {
+  return `${normalizeSheetKey(ownerName)}|${normalizeWalletTypeKey(walletType)}`;
 }
 
 function parseSheetDate(value) {
@@ -296,6 +309,9 @@ app.use(checkAccountStatus);
 
 // 🌐 Serve dashboard
 app.use(express.static(path.join(__dirname, "public")));
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
 
 // 📥 WEBHOOK (REAL PAYMENT)
 app.post("/webhook", async (req, res) => {
@@ -605,7 +621,8 @@ app.get("/api/transactions", requirePermission("view_page_pending_deposits"), (r
       res.json({
         data: rows,
         total: countRow.total,
-        totalPages: Math.ceil(countRow.total / limit)
+        totalPages: Math.ceil(countRow.total / limit),
+        formatTransactionAmounts: Number(appSettings.formatTransactionAmounts ?? 1) === 1
       });
 
     });
@@ -848,7 +865,13 @@ app.post("/api/update", requireTransactionUpdatePermission, async (req, res) => 
 app.post("/api/upload-wallet", requirePermission("manage_wallets"), upload.single("file"), (req, res) => {
   const user = getLogUser(req);
 
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: "No file uploaded" });
+  }
+
   const results = [];
+  const uploadedAt = new Date().toISOString();
+  const fileName = req.file.originalname || "wallet.csv";
 
   fs.createReadStream(req.file.path)
     .pipe(csv())
@@ -862,8 +885,8 @@ app.post("/api/upload-wallet", requirePermission("manage_wallets"), upload.singl
           agentGroup, depositDailyLimit, withdrawalDailyLimit,
           todayDeposits, todayWithdrawals,
           depositPriority, withdrawalPriority,
-          remarks, createdAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          remarks, createdAt, uploadedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       results.forEach(row => {
@@ -887,7 +910,8 @@ app.post("/api/upload-wallet", requirePermission("manage_wallets"), upload.singl
           row["Deposit Priority"] || 0,
           row["Withdrawal Priority"] || 0,
           row["Remarks"] || "",
-          row["Created At"] || ""
+          row["Created At"] || "",
+          uploadedAt
         ]);
 
       });
@@ -906,7 +930,7 @@ app.post("/api/upload-wallet", requirePermission("manage_wallets"), upload.singl
         fs.unlinkSync(req.file.path);
 
         console.log("✅ Wallets uploaded:", results.length);
-        addLog("INFO", `Wallet upload completed (${results.length} rows)`, user);
+        addLog("INFO", `Wallet upload completed (${results.length} rows from ${fileName})`, user);
 
         // ✅ FIX
         const io = getIO();
@@ -919,13 +943,35 @@ app.post("/api/upload-wallet", requirePermission("manage_wallets"), upload.singl
 
         res.json({
           success: true,
-          total: results.length
+          total: results.length,
+          uploadedAt,
+          fileName
         });
 
       });
 
     });
 
+});
+
+app.get("/api/wallet/list-upload-status", requirePermission("view_page_wallet"), (req, res) => {
+  res.set("Cache-Control", "no-store");
+
+  db.get(`
+    SELECT COUNT(*) as rowCount, MAX(uploadedAt) as uploadedAt
+    FROM wallets
+  `, (err, row) => {
+    if (err) {
+      console.error("Wallet list upload status lookup failed:", err.message);
+      return res.status(500).json({ success: false, message: "Wallet upload status lookup failed" });
+    }
+
+    res.json({
+      success: true,
+      rowCount: Number(row?.rowCount || 0),
+      uploadedAt: row?.uploadedAt || null
+    });
+  });
 });
 
 function readZipEntries(filePath) {
@@ -1085,6 +1131,56 @@ function parseSheetRows(filePath, originalName = "") {
   throw new Error("Only .csv or .xlsx files are allowed");
 }
 
+function sheetRowsToObjects(rows) {
+  const headerIndex = rows.findIndex(row =>
+    row.some(cell => String(cell || "").trim())
+  );
+
+  if (headerIndex < 0) return [];
+
+  const headers = rows[headerIndex].map(cell => String(cell || "").trim());
+
+  return rows.slice(headerIndex + 1)
+    .filter(row => row.some(cell => String(cell || "").trim()))
+    .map(row => headers.reduce((obj, header, index) => {
+      if (header) obj[header] = row[index] ?? "";
+      return obj;
+    }, {}));
+}
+
+function normalizeBulkApproveRows(rows) {
+  const objects = sheetRowsToObjects(rows);
+  const seen = new Set();
+  const items = [];
+  const duplicates = [];
+  const invalid = [];
+
+  objects.forEach((row, index) => {
+    const ref = getCsvValue(row, ["Ref", "Reference", "Transaction Reference", "transactionReference"]);
+    const reason = getCsvValue(row, ["Reason", "Remarks", "Comment"]);
+    const normalizedRef = normalizeMatchValue(ref);
+
+    if (!normalizedRef) {
+      invalid.push(index + 2);
+      return;
+    }
+
+    if (seen.has(normalizedRef)) {
+      duplicates.push(ref);
+      return;
+    }
+
+    seen.add(normalizedRef);
+    items.push({
+      ref: String(ref || "").trim(),
+      normalizedRef,
+      reason: String(reason || "").trim()
+    });
+  });
+
+  return { items, duplicates, invalid };
+}
+
 function normalizeOpeningBalanceRows(rows, shopColumn, balanceColumn) {
   const normalizedShop = normalizeMatchValue(shopColumn || "SHOP");
   const normalizedBalance = normalizeMatchValue(balanceColumn || "BALANCE");
@@ -1224,7 +1320,7 @@ app.post("/api/wallet/opening-balance/upload", requirePermission("manage_wallets
         io.emit("walletUpdated", {
           updatedBy: req.session.user.username,
           total: rows.length,
-          time: new Date().toLocaleString()
+          time: new Date(uploadedAt).toLocaleString()
         });
 
         addLog("INFO", `Opening balance uploaded (${rows.length} shops)`, user);
@@ -1355,6 +1451,56 @@ app.delete("/api/wallet/daily-activity/clear", requirePermission("manage_wallets
   });
 });
 
+app.get("/api/wallet/upload-status", requireAnyPermission([
+  "view_page_balance",
+  "view_page_wallet_health",
+  "wallet_health"
+]), (req, res) => {
+  res.set("Cache-Control", "no-store");
+
+  const files = {
+    opening: { rowCount: 0, uploadedAt: null },
+    deposit: { rowCount: 0, uploadedAt: null },
+    withdrawal: { rowCount: 0, uploadedAt: null }
+  };
+
+  db.get(`
+    SELECT COUNT(*) as rowCount, MAX(uploadedAt) as uploadedAt
+    FROM opening_balances
+  `, (err, openingRow) => {
+    if (err) {
+      console.error("Upload status opening lookup failed:", err.message);
+      return res.status(500).json({ success: false, message: "Upload status lookup failed" });
+    }
+
+    files.opening = {
+      rowCount: Number(openingRow?.rowCount || 0),
+      uploadedAt: openingRow?.uploadedAt || null
+    };
+
+    db.all(`
+      SELECT direction, COUNT(*) as rowCount, MAX(uploadedAt) as uploadedAt
+      FROM wallet_daily_activity
+      GROUP BY direction
+    `, (err, activityRows) => {
+      if (err) {
+        console.error("Upload status activity lookup failed:", err.message);
+        return res.status(500).json({ success: false, message: "Upload status lookup failed" });
+      }
+
+      (activityRows || []).forEach(row => {
+        const direction = row.direction === "withdrawal" ? "withdrawal" : "deposit";
+        files[direction] = {
+          rowCount: Number(row.rowCount || 0),
+          uploadedAt: row.uploadedAt || null
+        };
+      });
+
+      res.json({ success: true, files });
+    });
+  });
+});
+
 app.get("/api/wallets", requirePermission("view_page_wallet"), (req, res) => {
   db.all(`
     SELECT * FROM wallets ORDER BY id DESC
@@ -1385,14 +1531,6 @@ app.get("/api/wallet-health", requireAnyPermission([
   "view_page_wallet_health",
   "wallet_health"
 ]), async (req, res) => {
-  let apiBalances = new Map();
-  try {
-    apiBalances = await getSettlementSheetDeductions();
-  } catch (err) {
-    console.error("WALLET HEALTH API BALANCE ERROR:", err.message);
-    addLog("WARN", `Wallet health API balance skipped: ${err.message}`);
-  }
-
   db.all(`
     SELECT *
     FROM wallet_health
@@ -1405,11 +1543,10 @@ app.get("/api/wallet-health", requireAnyPermission([
 
     res.json(rows.map(row => {
       const uploadedApiBalance = Number(row.apiBalance || 0);
-      const sheetApiBalance = apiBalances.get(`${normalizeSheetKey(row.ownerName)}|${normalizeSheetKey(row.walletType)}`) || 0;
 
       return {
         ...row,
-        apiBalance: uploadedApiBalance || sheetApiBalance
+        apiBalance: uploadedApiBalance
       };
     }));
   });
@@ -1620,6 +1757,167 @@ app.post("/api/wallet-health/send", requirePermission("send_telegram"), async (r
   }
 });
 
+app.post("/api/balance/overview/send", requirePermission("send_telegram"), async (req, res) => {
+  const user = getLogUser(req);
+  const rows = normalizeBalanceOverviewSendRows(req.body.rows);
+  const imageGroups = normalizeBalanceOverviewImageGroups(req.body.imageGroups);
+  const imagesByGroup = new Map(imageGroups.map(group => [group.agentGroup.toUpperCase(), group]));
+  const messageText = cleanBalanceOverviewSendText(req.body.messageText, 1500);
+
+  if (!rows.length) {
+    return res.status(400).json({ success: false, message: "No overview rows selected" });
+  }
+
+  try {
+    const rowsByGroup = new Map();
+    const missingGroups = [];
+    const missingSet = new Set();
+
+    rows.forEach(row => {
+      const group = cleanBalanceOverviewSendText(row.agentGroup, 80);
+      if (!group || group === "-") {
+        const label = row.ownerName && row.ownerName !== "-"
+          ? `No Group (${row.ownerName})`
+          : "No Group";
+        if (!missingSet.has(label)) {
+          missingSet.add(label);
+          missingGroups.push(label);
+        }
+        return;
+      }
+
+      if (!rowsByGroup.has(group)) rowsByGroup.set(group, []);
+      rowsByGroup.get(group).push(row);
+    });
+
+    let sentGroups = 0;
+    let sentRows = 0;
+
+    for (const [group, groupRows] of rowsByGroup.entries()) {
+      const chatRow = await dbGet(`
+        SELECT chatId
+        FROM chat_ids
+        WHERE UPPER(TRIM(agentName)) = UPPER(TRIM(?))
+           OR UPPER(TRIM(groupName)) = UPPER(TRIM(?))
+           OR UPPER(TRIM(groupName)) = UPPER(TRIM(?))
+        ORDER BY id DESC
+        LIMIT 1
+      `, [group, group, `ESS-${group}`]);
+
+      if (!chatRow?.chatId) {
+        if (!missingSet.has(group)) {
+          missingSet.add(group);
+          missingGroups.push(group);
+        }
+        continue;
+      }
+
+      const imageGroup = imagesByGroup.get(group.toUpperCase());
+
+      if (imageGroup?.images?.length) {
+        await sendBalanceOverviewImageTelegram({
+          chatId: chatRow.chatId,
+          agentGroup: group,
+          totalRows: imageGroup.totalRows || groupRows.length,
+          images: imageGroup.images,
+          messageText
+        });
+      } else {
+        await sendBalanceOverviewTelegram({
+          chatId: chatRow.chatId,
+          agentGroup: group,
+          rows: groupRows,
+          messageText
+        });
+      }
+
+      sentGroups += 1;
+      sentRows += groupRows.length;
+    }
+
+    if (sentRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: `No Chat ID found for ${missingGroups.join(", ")}`
+      });
+    }
+
+    addLog("INFO", `Balance overview sent (${sentRows} rows, ${sentGroups} groups)`, user);
+    res.json({
+      success: true,
+      total: sentRows,
+      groups: sentGroups,
+      missingGroups
+    });
+  } catch (err) {
+    console.error("BALANCE OVERVIEW SEND ERROR:", err);
+    addLog("ERROR", `Balance overview send failed: ${err.message}`, user);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+function normalizeBalanceOverviewSendRows(input) {
+  if (!Array.isArray(input)) return [];
+
+  return input.slice(0, 250)
+    .map(row => {
+      const values = Array.isArray(row?.values)
+        ? row.values.slice(0, 24).map(field => ({
+          label: cleanBalanceOverviewSendText(field?.label, 80),
+          value: cleanBalanceOverviewSendText(field?.value, 400)
+        })).filter(field => field.label)
+        : [];
+
+      return {
+        ownerName: cleanBalanceOverviewSendText(row?.ownerName, 120) || "-",
+        agentGroup: cleanBalanceOverviewSendText(row?.agentGroup, 80) || "-",
+        values
+      };
+    })
+    .filter(row => row.values.length > 0);
+}
+
+function normalizeBalanceOverviewImageGroups(input) {
+  if (!Array.isArray(input)) return [];
+
+  return input.slice(0, 30)
+    .map(group => {
+      const agentGroup = cleanBalanceOverviewSendText(group?.agentGroup, 80) || "-";
+      const images = Array.isArray(group?.images)
+        ? group.images.slice(0, 12).map(decodeOverviewImageDataUrl).filter(Boolean)
+        : [];
+
+      return {
+        agentGroup,
+        totalRows: Number(group?.totalRows || 0) || 0,
+        images
+      };
+    })
+    .filter(group => group.agentGroup && group.images.length > 0);
+}
+
+function decodeOverviewImageDataUrl(value) {
+  const text = String(value || "");
+  const match = text.match(/^data:image\/(?:png|jpe?g);base64,([A-Za-z0-9+/=]+)$/);
+  if (!match || match[1].length > 2_500_000) return null;
+
+  try {
+    const buffer = Buffer.from(match[1], "base64");
+    return buffer.length > 0 && buffer.length <= 2_000_000 ? buffer : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function cleanBalanceOverviewSendText(value, limit = 400) {
+  return String(value || "")
+    .replace(/\r/g, "")
+    .replace(/\t/g, " ")
+    .replace(/[ \f\v]+/g, " ")
+    .trim()
+    .slice(0, limit);
+}
+
 function dbAll(sql, params = []) {
   return new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => {
@@ -1634,6 +1932,15 @@ function dbGet(sql, params = []) {
     db.get(sql, params, (err, row) => {
       if (err) return reject(err);
       resolve(row);
+    });
+  });
+}
+
+function dbRun(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function(err) {
+      if (err) return reject(err);
+      resolve(this);
     });
   });
 }
@@ -1770,10 +2077,13 @@ app.get("/api/settled", requirePermission("view_page_settled_deposits"), (req, r
   db.all(query, params, (err, rows) => {
     if (err) {
       console.error("❌ SETTLED ERROR:", err);
-      return res.json([]);
+      return res.json({ data: [], formatTransactionAmounts: Number(appSettings.formatTransactionAmounts ?? 1) === 1 });
     }
 
-    res.json(rows);
+    res.json({
+      data: rows,
+      formatTransactionAmounts: Number(appSettings.formatTransactionAmounts ?? 1) === 1
+    });
   });
 });
 
@@ -2025,7 +2335,8 @@ app.post("/api/settings", requirePermission("settings_access")
     settlementDateColumn,
     balanceCalculationSettings,
     walletTypes,
-    balanceTodaySource
+    balanceTodaySource,
+    formatTransactionAmounts
   } = req.body;
 
   if (!gsheetLink) {
@@ -2073,6 +2384,8 @@ app.post("/api/settings", requirePermission("settings_access")
   const normalizedSettlementDateColumn = String(settlementDateColumn || "Date").trim() || "Date";
   const normalizedWalletTypes = JSON.stringify(normalizeWalletTypes(walletTypes));
   const normalizedBalanceTodaySource = balanceTodaySource === "wallet" ? "wallet" : "upload";
+  const normalizedFormatTransactionAmounts =
+    formatTransactionAmounts === false || formatTransactionAmounts === "0" ? 0 : 1;
 
   db.get(`SELECT botToken FROM settings WHERE id = 1`, (err, existingSettings) => {
     if (err) {
@@ -2100,9 +2413,9 @@ app.post("/api/settings", requirePermission("settings_access")
       openingBalanceShopColumn, openingBalanceAmountColumn,
       settlementSheetLink, settlementWorksheetName, settlementAgentColumn,
       settlementWalletColumn, settlementAmountColumn, settlementDateColumn,
-      balanceCalculationSettings, walletTypes, balanceTodaySource
+      balanceCalculationSettings, walletTypes, balanceTodaySource, formatTransactionAmounts
     )
-    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       botToken = excluded.botToken,
       gsheetLink = excluded.gsheetLink,
@@ -2132,7 +2445,8 @@ app.post("/api/settings", requirePermission("settings_access")
       settlementDateColumn = excluded.settlementDateColumn,
       balanceCalculationSettings = excluded.balanceCalculationSettings,
       walletTypes = excluded.walletTypes,
-      balanceTodaySource = excluded.balanceTodaySource
+      balanceTodaySource = excluded.balanceTodaySource,
+      formatTransactionAmounts = excluded.formatTransactionAmounts
   `, [
     normalizedBotToken,
     gsheetLink,
@@ -2162,7 +2476,8 @@ app.post("/api/settings", requirePermission("settings_access")
     normalizedSettlementDateColumn,
     normalizedBalanceCalculationSettings,
     normalizedWalletTypes,
-    normalizedBalanceTodaySource
+    normalizedBalanceTodaySource,
+    normalizedFormatTransactionAmounts
   ], (err) => {
     if (err) {
       console.error("Settings save failed:", err.message);
@@ -2170,6 +2485,7 @@ app.post("/api/settings", requirePermission("settings_access")
     }
 
     loadSettings();
+    initializeBotFromSettings();
     addLog(
       "WARN",
       `Settings changed (follow-up ${normalizedFollowUpEnabled ? "enabled" : "disabled"}, interval ${normalizedFollowUpInterval}m, schedule ${followUpStartTime || "all-day"}-${followUpEndTime || "all-day"})`,
@@ -2197,6 +2513,9 @@ app.get("/api/settings", requirePermission("settings_access"), (req, res) => {
     );
     settings.walletTypes = JSON.stringify(normalizeWalletTypes(settings.walletTypes));
     settings.balanceTodaySource = settings.balanceTodaySource === "wallet" ? "wallet" : "upload";
+    settings.formatTransactionAmounts = settings.formatTransactionAmounts === undefined
+      ? 1
+      : Number(settings.formatTransactionAmounts) === 1 ? 1 : 0;
     settings.hasBotToken = Boolean(settings.botToken);
     settings.botToken = maskSecret(settings.botToken);
     res.json(settings);
@@ -2269,7 +2588,7 @@ async function getSettlementSheetDeductions() {
     const amount = parseMoney(row[amountIndex]);
     if (!agent || !wallet || amount <= 0) return;
 
-    const key = `${agent}|${wallet}`;
+    const key = makeSettlementKey(agent, wallet);
     deductions.set(key, (deductions.get(key) || 0) + amount);
   });
 
@@ -2705,9 +3024,17 @@ app.post("/api/send-logs", requirePermission("send_logs"), async (req, res) => {
         const chunks = text.match(/[\s\S]{1,3500}/g) || [];
 
         let sent = 0;
+        const telegramBot = getBot();
+
+        if (!telegramBot) {
+          return res.json({
+            success: false,
+            message: "Telegram bot is not initialized. Save the bot token in Settings first."
+          });
+        }
 
         for (const chunk of chunks) {
-          await bot.sendMessage(settings.chatId, chunk);
+          await telegramBot.sendMessage(settings.chatId, chunk);
           sent++;
         }
 
@@ -3334,6 +3661,107 @@ app.post("/api/transactions/bulk-reject", requirePermission("reject_transactions
   );
 });
 
+app.get("/api/transactions/bulk-approve-template", requireAnyPermission([
+  "approve_transactions",
+  "export_transactions"
+]), (req, res) => {
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", "attachment; filename=pending_approve_template.csv");
+  res.send("Ref,Reason\n");
+});
+
+app.post("/api/transactions/bulk-approve-file", requirePermission("approve_transactions"), upload.single("file"), async (req, res) => {
+  const user = req.session?.user?.username || "unknown";
+
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: "No file uploaded" });
+  }
+
+  try {
+    const rows = parseSheetRows(req.file.path, req.file.originalname);
+    const { items, duplicates, invalid } = normalizeBulkApproveRows(rows);
+
+    if (!items.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid Ref rows found. File must include Ref and Reason columns.",
+        invalidRows: invalid
+      });
+    }
+
+    const approvedRefs = [];
+    const missingRefs = [];
+    const depositIds = [];
+    let updated = 0;
+
+    for (const item of items) {
+      const pendingRows = await dbAll(`
+        SELECT id, depositId
+        FROM transactions
+        WHERE UPPER(TRIM(transactionReference)) = ?
+          AND (actionStatus IS NULL OR actionStatus = 'PENDING')
+      `, [item.normalizedRef]);
+
+      if (!pendingRows.length) {
+        missingRefs.push(item.ref);
+        continue;
+      }
+
+      const result = await dbRun(`
+        UPDATE transactions
+        SET
+          actionStatus = 'APPROVED',
+          reason = ?,
+          settledBy = ?,
+          settledAt = datetime('now', '+8 hours')
+        WHERE UPPER(TRIM(transactionReference)) = ?
+          AND (actionStatus IS NULL OR actionStatus = 'PENDING')
+      `, [item.reason, user, item.normalizedRef]);
+
+      if (result.changes > 0) {
+        updated += result.changes;
+        approvedRefs.push(item.ref);
+        pendingRows.forEach(row => {
+          if (row.depositId) depositIds.push(row.depositId);
+        });
+      }
+    }
+
+    addLog(
+      "INFO",
+      `Bulk approved ${updated} pending deposits from ${req.file.originalname || "file"} (${approvedRefs.length} refs)`,
+      user
+    );
+
+    if (updated > 0) {
+      createNotification({
+        type: "BULK",
+        title: "Bulk Approved",
+        message: `${user} approved ${updated} pending deposits from file`,
+        meta: { depositIds },
+        target: "ALL"
+      });
+    }
+
+    res.json({
+      success: true,
+      totalFileRows: items.length + duplicates.length + invalid.length,
+      validRows: items.length,
+      updated,
+      matchedRefs: approvedRefs.length,
+      missingRefs,
+      duplicateRefs: duplicates,
+      invalidRows: invalid
+    });
+  } catch (err) {
+    console.error("Bulk approve file failed:", err);
+    addLog("ERROR", `Bulk approve file failed: ${err.message}`, user);
+    res.status(500).json({ success: false, message: err.message || "Bulk approve failed" });
+  } finally {
+    fs.unlink(req.file.path, () => {});
+  }
+});
+
 app.post("/api/transactions/bulk-delete", requirePermission("bulk_delete_transactions"), (req, res) => {
   const { ids } = req.body;
 
@@ -3509,18 +3937,25 @@ app.get("/api/export/settled", requirePermission("export_transactions"), (req, r
   });
 });
 
+const USER_ROLES = ["user", "payment", "admin", "developer", "cs"];
+const USER_STATUSES = ["ACTIVE", "INACTIVE", "LOCKED", "DISABLED"];
+
+function normalizeUserStatusValue(status) {
+  return String(status || "ACTIVE").trim().toUpperCase();
+}
+
 /////////////////Create Account//////////////////////
 app.post("/api/register", requirePermission("create_users"), async (req, res) => {
   const currentUser = req.session.user;
   const { username, password, role } = req.body;
+  const cleanUsername = String(username || "").trim();
 
-  if (!username || !password || !role) {
+  if (!cleanUsername || !password || !role) {
     return res.json({ success: false, message: "Missing fields" });
   }
 
   // 🔒 VALID ROLES ONLY
-  const validRoles = ["user", "payment", "admin", "developer", "cs"];
-  if (!validRoles.includes(role)) {
+  if (!USER_ROLES.includes(role)) {
     return res.status(400).json({ success: false, message: "Invalid role" });
   }
 
@@ -3536,21 +3971,21 @@ app.post("/api/register", requirePermission("create_users"), async (req, res) =>
 
     db.run(
       `INSERT INTO users (username, password, role) VALUES (?, ?, ?)`,
-      [username, hash, role],
+      [cleanUsername, hash, role],
       function (err) {
         if (err) {
-          addLog("ERROR", `Create user failed for ${username}: ${err.message}`, currentUser.username);
+          addLog("ERROR", `Create user failed for ${cleanUsername}: ${err.message}`, currentUser.username);
           return res.json({ success: false, message: "User exists" });
         }
 
         createNotification({
   type: "USER",
   title: "New User Created",
-  message: `${currentUser.username} created ${username} (${role})`,
+  message: `${currentUser.username} created ${cleanUsername} (${role})`,
   target: "ALL"
 });
 
-        addLog("WARN", `User created (${username}, role ${role})`, currentUser.username);
+        addLog("WARN", `User created (${cleanUsername}, role ${role})`, currentUser.username);
         res.json({ success: true });
       }
     );
@@ -3640,6 +4075,7 @@ app.get("/api/users", requireAnyPermission([
   db.all(`
     SELECT id, username, role, status, lastActive
     FROM users
+    ORDER BY id ASC
   `, (err, rows) => {
 
     if (err) return res.json([]);
@@ -3654,6 +4090,13 @@ app.post("/api/user-role", requirePermission("change_roles"), (req, res) => {
 
   const currentUser = req.session.user;
   const { id, role } = req.body;
+
+  if (!USER_ROLES.includes(role)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid role"
+    });
+  }
 
   // Only developer can assign developer.
   if (
@@ -3785,6 +4228,107 @@ app.post("/api/change-password", async (req, res) => {
   });
 });
 
+app.post("/api/user-update", requirePermission("manage_users"), async (req, res) => {
+  const currentUser = req.session.user;
+  const { id, username, status, password } = req.body;
+  const userId = Number(id);
+  const cleanUsername = String(username || "").trim();
+  const cleanStatus = normalizeUserStatusValue(status);
+
+  if (!userId || !cleanUsername || !USER_STATUSES.includes(cleanStatus)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid user details"
+    });
+  }
+
+  if (password && String(password).length < 4) {
+    return res.status(400).json({
+      success: false,
+      message: "Password must be at least 4 characters"
+    });
+  }
+
+  db.get(
+    "SELECT id, username, role, status FROM users WHERE id=?",
+    [userId],
+    async (err, user) => {
+      if (err) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to load user"
+        });
+      }
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found"
+        });
+      }
+
+      if (currentUser.role !== "developer" && user.role === "developer") {
+        return res.status(403).json({
+          success: false,
+          message: "Only developer can modify developer account"
+        });
+      }
+
+      if (
+        Number(currentUser.id) === userId &&
+        ["LOCKED", "DISABLED"].includes(cleanStatus)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "You cannot lock or disable your own account"
+        });
+      }
+
+      const updates = ["username=?", "status=?"];
+      const params = [cleanUsername, cleanStatus];
+
+      if (password) {
+        try {
+          const hash = await bcrypt.hash(String(password), 10);
+          updates.push("password=?");
+          params.push(hash);
+        } catch (hashErr) {
+          addLog("ERROR", `Password hash failed for user ID ${userId}: ${hashErr.message}`, currentUser.username);
+          return res.status(500).json({
+            success: false,
+            message: "Password update failed"
+          });
+        }
+      }
+
+      params.push(userId);
+
+      db.run(
+        `UPDATE users SET ${updates.join(", ")} WHERE id=?`,
+        params,
+        function (updateErr) {
+          if (updateErr) {
+            const message = updateErr.message?.includes("UNIQUE")
+              ? "Username already exists"
+              : "User update failed";
+
+            addLog("ERROR", `User update failed (ID ${userId}): ${updateErr.message}`, currentUser.username);
+            return res.status(400).json({ success: false, message });
+          }
+
+          addLog(
+            "WARN",
+            `User updated (ID ${userId}, ${user.username} -> ${cleanUsername}, status ${cleanStatus}${password ? ", password reset" : ""})`,
+            currentUser.username
+          );
+
+          res.json({ success: true });
+        }
+      );
+    }
+  );
+});
+
 function getUserStatus(user) {
   if (!user.lastActive) return "OFFLINE";
 
@@ -3794,13 +4338,68 @@ function getUserStatus(user) {
 }
 
 app.post("/api/user/status", requirePermission("manage_users"), (req, res) => {
+  const currentUser = req.session.user;
   const { userId, status } = req.body;
+  const targetId = Number(userId);
+  const cleanStatus = normalizeUserStatusValue(status);
 
-  db.run(`
-    UPDATE users SET status = ? WHERE id = ?
-  `, [status, userId], () => {
-    res.json({ success: true });
-  });
+  if (!targetId || !USER_STATUSES.includes(cleanStatus)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid status"
+    });
+  }
+
+  db.get(
+    "SELECT id, role FROM users WHERE id=?",
+    [targetId],
+    (err, user) => {
+      if (err) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to load user"
+        });
+      }
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found"
+        });
+      }
+
+      if (currentUser.role !== "developer" && user.role === "developer") {
+        return res.status(403).json({
+          success: false,
+          message: "Only developer can modify developer account"
+        });
+      }
+
+      if (
+        Number(currentUser.id) === targetId &&
+        ["LOCKED", "DISABLED"].includes(cleanStatus)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "You cannot lock or disable your own account"
+        });
+      }
+
+      db.run(`
+        UPDATE users SET status = ? WHERE id = ?
+      `, [cleanStatus, targetId], (updateErr) => {
+        if (updateErr) {
+          return res.status(500).json({
+            success: false,
+            message: "Status update failed"
+          });
+        }
+
+        addLog("WARN", `User status changed (ID ${targetId}, status ${cleanStatus})`, currentUser.username);
+        res.json({ success: true });
+      });
+    }
+  );
 });
 
 async function updateUserStatus(id, status) {
@@ -4179,6 +4778,8 @@ app.get("/api/wallets/monitor", requireAnyPermission([
   "view_page_wallet_health",
   "wallet_health"
 ]), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+
   const {
     search = "",
     agentGroup = "",
@@ -4222,11 +4823,20 @@ app.get("/api/wallets/monitor", requireAnyPermission([
       FROM wallet_daily_activity
       GROUP BY normalizedOwnerName, normalizedWalletType
     ),
-    wallet_health_api AS (
+    wallet_health_summary AS (
       SELECT
         UPPER(TRIM(ownerName)) as normalizedShop,
         UPPER(TRIM(walletType)) as normalizedWalletType,
-        SUM(COALESCE(apiBalance, 0)) as uploadedApiBalance
+        SUM(COALESCE(apiBalance, 0)) as uploadedApiBalance,
+        MAX(CASE UPPER(TRIM(appCondition))
+          WHEN 'APP_OFFLINE' THEN 60
+          WHEN 'API_FAILING' THEN 55
+          WHEN 'NO_ACTIVE_DEVICE' THEN 50
+          WHEN 'PERMISSION_MISSING' THEN 45
+          WHEN 'SYNC_DELAYED' THEN 40
+          WHEN 'HEALTHY' THEN 10
+          ELSE 20
+        END) as conditionPriority
       FROM wallet_health
       GROUP BY UPPER(TRIM(ownerName)), UPPER(TRIM(walletType))
     )
@@ -4236,7 +4846,16 @@ app.get("/api/wallets/monitor", requireAnyPermission([
       COALESCE(ob.openingBalance, 0) as openingBalance,
       ${todayDepositSql} as todayDeposits,
       ${todayWithdrawalSql} as todayWithdrawals,
-      COALESCE(wha.uploadedApiBalance, 0) as apiBalance,
+      COALESCE(whs.uploadedApiBalance, 0) as apiBalance,
+      CASE COALESCE(whs.conditionPriority, 0)
+        WHEN 60 THEN 'Disconnected'
+        WHEN 55 THEN 'API Failing'
+        WHEN 50 THEN 'No Active Device'
+        WHEN 45 THEN 'Permission Missing'
+        WHEN 40 THEN 'Sync Delayed'
+        WHEN 10 THEN 'Healthy'
+        ELSE '-'
+      END as walletCondition,
       COALESCE(ob.openingBalance, 0)
         + ${todayDepositSql}
         - ${todayWithdrawalSql} as balance,
@@ -4258,9 +4877,9 @@ app.get("/api/wallets/monitor", requireAnyPermission([
     LEFT JOIN wallet_daily_activity_totals wda
       ON wda.normalizedShop = ob.normalizedShop
       AND wda.normalizedWalletType = UPPER(TRIM(COALESCE(NULLIF(w.walletType, ''), '-')))
-    LEFT JOIN wallet_health_api wha
-      ON wha.normalizedShop = ob.normalizedShop
-      AND wha.normalizedWalletType = UPPER(TRIM(COALESCE(NULLIF(w.walletType, ''), '-')))
+    LEFT JOIN wallet_health_summary whs
+      ON whs.normalizedShop = ob.normalizedShop
+      AND whs.normalizedWalletType = UPPER(TRIM(COALESCE(NULLIF(w.walletType, ''), '-')))
     WHERE 1=1
   `;
   let params = [];
@@ -4336,27 +4955,30 @@ app.get("/api/wallets/monitor", requireAnyPermission([
       const current = ownerBalances.get(ownerKey) || {
         openingBalance: Number(row.openingBalance || 0),
         todayDeposits: 0,
-        todayWithdrawals: 0
+        todayWithdrawals: 0,
+        settlement: 0
       };
 
       current.todayDeposits += Number(row.todayDeposits || 0);
       current.todayWithdrawals += Number(row.todayWithdrawals || 0);
-      current.balance = current.openingBalance + current.todayDeposits - current.todayWithdrawals;
+      current.settlement += settlementDeductions.get(makeSettlementKey(row.ownerName, row.walletType)) || 0;
+      current.balance = current.openingBalance + current.todayDeposits - current.todayWithdrawals - current.settlement;
       ownerBalances.set(ownerKey, current);
     });
 
     const data = rows.map(row => {
-      const settlementKey = `${normalizeSheetKey(row.ownerName)}|${normalizeSheetKey(row.walletType)}`;
+      const settlementKey = makeSettlementKey(row.ownerName, row.walletType);
       const uploadedApiBalance = Number(row.apiBalance || 0);
-      const sheetApiBalance = settlementDeductions.get(settlementKey) || 0;
-      const apiBalance = uploadedApiBalance || sheetApiBalance;
+      const settlementAmount = settlementDeductions.get(settlementKey) || 0;
       const displayWalletType = walletTypeMap.get(normalizeWalletTypeKey(row.walletType)) || row.walletType;
       const ownerBalance = ownerBalances.get(normalizeSheetKey(row.ownerName));
 
       return {
         ...row,
         walletType: displayWalletType,
-        apiBalance,
+        settlement: settlementAmount,
+        walletHealthApiBalance: uploadedApiBalance,
+        apiBalance: uploadedApiBalance,
         todayDeposits: Number(row.todayDeposits || 0),
         todayWithdrawals: Number(row.todayWithdrawals || 0),
         balance: Number(ownerBalance?.balance || 0)
@@ -4638,8 +5260,11 @@ app.get("/api/video-case", requirePermission("view_page_video_case"), (req, res)
   sql += ` ORDER BY id DESC`;
 
   db.all(sql, params, (err, rows) => {
-    if (err) return res.json([]);
-    res.json(rows);
+    if (err) return res.json({ data: [], formatTransactionAmounts: Number(appSettings.formatTransactionAmounts ?? 1) === 1 });
+    res.json({
+      data: rows,
+      formatTransactionAmounts: Number(appSettings.formatTransactionAmounts ?? 1) === 1
+    });
   });
 });
 
@@ -4820,9 +5445,12 @@ app.get("/api/video/settled", requirePermission("view_page_settled_video"), (req
   db.all(sql, params, (err, rows) => {
     if (err) {
       console.error(err);
-      return res.json([]);
+      return res.json({ data: [], formatTransactionAmounts: Number(appSettings.formatTransactionAmounts ?? 1) === 1 });
     }
-    res.json(rows);
+    res.json({
+      data: rows,
+      formatTransactionAmounts: Number(appSettings.formatTransactionAmounts ?? 1) === 1
+    });
   });
 });
 

@@ -4,6 +4,9 @@ const db = require("./db");
 const { getIO } = require("./socket");
 
 let bot;
+let activeTelegramToken = "";
+let followUpTimeout;
+let followUpInterval;
 const FOLLOW_UP_CHECK_INTERVAL_MS = 60 * 1000;
 const DEFAULT_FOLLOW_UP_INTERVAL_MINUTES = 30;
 const MAX_FOLLOW_UPS = 3;
@@ -52,6 +55,21 @@ process.on("unhandledRejection", (reason) => {
   addSystemLog("CRITICAL", `Bot unhandled rejection: ${message}`);
 });
 
+function getBot() {
+  return bot;
+}
+
+function scheduleFollowUps() {
+  if (!followUpTimeout) {
+    followUpTimeout = setTimeout(runPendingFollowUps, 5 * 1000);
+  }
+
+  if (!followUpInterval) {
+    followUpInterval = setInterval(runPendingFollowUps, FOLLOW_UP_CHECK_INTERVAL_MS);
+  }
+}
+
+function initializeBotFromSettings() {
 db.get(`SELECT * FROM settings WHERE id = 1`, (err, row) => {
 
   if (err) {
@@ -74,13 +92,38 @@ db.get(`SELECT * FROM settings WHERE id = 1`, (err, row) => {
     addSystemLog("INFO", "Bot initialized with Telegram token from .env");
 
   }
+  const telegramToken = String(process.env.TELEGRAM_TOKEN || "").trim();
+
+  if (!telegramToken) {
+    console.error("Telegram bot token is not set. Save it in Settings or TELEGRAM_TOKEN before starting polling.");
+    addSystemLog("ERROR", "Telegram bot token is not set. Save it in Settings or TELEGRAM_TOKEN before starting polling.");
+    return;
+  }
+
+  if (bot && activeTelegramToken === telegramToken) {
+    console.log("Telegram bot already initialized with the current token");
+    return;
+  }
+
+  if (bot) {
+    bot.removeAllListeners();
+    bot.stopPolling().catch((stopErr) => {
+      console.error("Telegram polling stop failed:", stopErr.message);
+    });
+  }
+
+  activeTelegramToken = telegramToken;
+
   bot = new TelegramBot(
-    process.env.TELEGRAM_TOKEN,
+    telegramToken,
     { polling: true }
   );
+  bot.on("polling_error", (pollingErr) => {
+    console.error("TELEGRAM POLLING ERROR:", pollingErr.message);
+    addSystemLog("ERROR", `Telegram polling error: ${pollingErr.message}`);
+  });
 
-  setTimeout(runPendingFollowUps, 5 * 1000);
-  setInterval(runPendingFollowUps, FOLLOW_UP_CHECK_INTERVAL_MS);
+  scheduleFollowUps();
 
   /* ===============================
    📥 CALLBACK HANDLER
@@ -734,6 +777,9 @@ function escapeRegExp(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 });
+}
+
+initializeBotFromSettings();
 
 const { transcribeAndTranslate } = require("./helpers/transcribe");
 
@@ -837,7 +883,18 @@ function getDepositAnswerKeyboard(id) {
   };
 }
 
+function ensureBotReady(action) {
+  if (bot) return true;
+
+  const message = `Telegram bot is not initialized; cannot ${action}. Save the bot token in Settings first.`;
+  console.error(message);
+  addSystemLog("ERROR", message);
+  return false;
+}
+
 async function sendTelegram(data) {
+  if (!ensureBotReady("send pending message")) return null;
+
   try {
     const followUpCount = Number(data.followUpCount || 0);
     const messageOptions = data.messageOptions || {};
@@ -904,6 +961,8 @@ async function sendTelegram(data) {
    SEND TELEGRAM (VIDEO)
 ================================ */
 async function sendVideoTelegram(data) {
+  if (!ensureBotReady("send video message")) return null;
+
   const message = `🎥 Video Case
 
 Agent: ${data.agentName}
@@ -939,44 +998,23 @@ Video: ${data.imageLink}`;
 }
 
 async function sendWalletHealthTelegram(data) {
+  if (!ensureBotReady("send wallet health message")) return false;
+
   const rows = data.rows || [];
   const isAppUpdateNotice = data.messageType === "app_update";
+  const isPermissionNotice = data.messageType === "permission";
+  const ownerNames = compactUnique(rows.map(row => row.ownerName));
+  const walletCount = rows.length;
 
-  const lines = [
-    isAppUpdateNotice ? "Wallet App Update Required" : "Wallet Health Report",
-    ""
-  ];
+  let lines;
 
   if (isAppUpdateNotice) {
-    lines.push(
-      `Agent Group: ${data.agentGroup || "-"}`,
-      `Latest App Ver: ${data.latestVersion || "-"}`,
-      "",
-      "Please install/update to the latest wallet app, then confirm after installation.",
-      ""
-    );
+    lines = buildWalletAppUpdateMessage(data, ownerNames, walletCount);
+  } else if (isPermissionNotice) {
+    lines = buildWalletPermissionMessage(data, ownerNames, walletCount);
+  } else {
+    lines = buildWalletHealthMessage(data, ownerNames, walletCount);
   }
-
-  rows.forEach((row, index) => {
-    if (index > 0) lines.push("");
-
-    if (isAppUpdateNotice) {
-      lines.push(
-        `Owner: ${row.ownerName || "-"}`,
-        `Number: ${row.walletId || "-"}`,
-        `Current App Ver: ${row.appVersion || "-"}`,
-        `Device: ${row.deviceName || "-"}`
-      );
-    } else {
-      lines.push(
-        `Owner: ${row.ownerName || "-"}`,
-        `Number: ${row.walletId || "-"}`,
-        `Condition: ${row.appCondition || "-"}`,
-        `Permission: ${getPermissionIssues(row)}`,
-        `App Ver: ${row.appVersion || "-"}`
-      );
-    }
-  });
 
   for (const chunk of splitTelegramMessage(lines.join("\n"))) {
     await bot.sendMessage(data.chatId, chunk);
@@ -985,20 +1023,208 @@ async function sendWalletHealthTelegram(data) {
   return true;
 }
 
+async function sendBalanceOverviewTelegram(data) {
+  if (!ensureBotReady("send balance overview message")) return false;
+
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  const lines = buildBalanceOverviewMessage(data, rows);
+
+  for (const chunk of splitTelegramMessage(lines.join("\n"))) {
+    await bot.sendMessage(data.chatId, chunk);
+  }
+
+  return true;
+}
+
+async function sendBalanceOverviewImageTelegram(data) {
+  if (!ensureBotReady("send balance overview image")) return false;
+
+  const images = Array.isArray(data.images) ? data.images : [];
+  const caption = buildBalanceOverviewImageCaption(data);
+
+  for (let index = 0; index < images.length; index += 1) {
+    await bot.sendPhoto(
+      data.chatId,
+      images[index],
+      index === 0 ? { caption } : {}
+    );
+  }
+
+  return true;
+}
+
+function buildBalanceOverviewImageCaption(data) {
+  const messageText = cleanTelegramLine(data.messageText);
+
+  return messageText.slice(0, 1000);
+}
+
+function buildBalanceOverviewMessage(data, rows) {
+  const messageText = cleanTelegramLine(data.messageText);
+  const lines = [
+    "Balance Overview Notice",
+    `Group: ${cleanTelegramLine(data.agentGroup || "-")}`,
+    `Wallets: ${rows.length}`,
+    ""
+  ];
+
+  if (messageText) {
+    lines.push(messageText, "");
+  }
+
+  rows.forEach((row, index) => {
+    lines.push(`${index + 1}. ${cleanTelegramLine(row.ownerName || "Wallet")}`);
+
+    (Array.isArray(row.values) ? row.values : []).forEach(field => {
+      const label = cleanTelegramLine(field.label || "-");
+      const value = cleanTelegramLine(field.value || "-");
+      lines.push(`- ${label}: ${value || "-"}`);
+    });
+
+    lines.push("");
+  });
+
+  return lines;
+}
+
+function cleanTelegramLine(value) {
+  return String(value || "")
+    .replace(/\r/g, "")
+    .replace(/\t/g, " ")
+    .replace(/[ \f\v]+/g, " ")
+    .trim()
+    .slice(0, 1000);
+}
+
+function buildWalletHealthMessage(data, ownerNames, walletCount) {
+  return [
+    "Wallet Health Notice",
+    "",
+    "Owners:",
+    ...formatCompactList(ownerNames),
+    "",
+    "Action Required:",
+    "Clear app data and relog-in the wallet APP.",
+    "",
+    "Transactions are STOPPED until the APP is relogged-in."
+  ];
+}
+
+function buildWalletPermissionMessage(data, ownerNames, walletCount) {
+  return [
+    "Wallet Permission Notice",
+    "",
+    "Owners:",
+    ...formatCompactList(ownerNames),
+    "",
+    "Action Required:",
+    "Allow all required wallet APP permissions.",
+    "",
+    "Transactions are STOPPED until device permissions are fully allowed."
+  ];
+}
+
+function buildWalletAppUpdateMessage(data, ownerNames, walletCount) {
+  return [
+    "Wallet App Update Required",
+    `Latest App Ver: ${data.latestVersion || "-"}`,
+    "",
+    "Owners:",
+    ...formatCompactList(ownerNames),
+    "",
+    "Action Required:",
+    `Install the latest wallet APP version ${data.latestVersion || "4.X.X"}.`,
+    "",
+    "Transactions are STOPPED until the latest APP is installed."
+  ];
+}
+
+function summarizeWalletHealthIssues(rows) {
+  const issues = new Map();
+
+  rows.forEach(row => {
+    const conditionLabel = getHealthConditionLabel(row.appCondition);
+    addIssue(issues, conditionLabel);
+
+    const permissionIssues = getPermissionIssueList(row);
+    if (permissionIssues.length) {
+      addIssue(issues, `Permission: ${permissionIssues.join(", ")}`);
+    }
+  });
+
+  return Array.from(issues.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
+function addIssue(issues, label) {
+  const cleanLabel = String(label || "Needs review").trim();
+  if (!cleanLabel || cleanLabel === "Healthy") return;
+  issues.set(cleanLabel, (issues.get(cleanLabel) || 0) + 1);
+}
+
+function getHealthConditionLabel(value) {
+  const normalized = normalizeHealth(value);
+
+  if (normalized === "APP_OFFLINE") return "Disconnected";
+  if (normalized === "SYNC_DELAYED") return "Sync Delayed";
+  if (normalized === "PERMISSION_MISSING") return "Permission Missing";
+  if (normalized === "NO_ACTIVE_DEVICE") return "No Active Device";
+  if (normalized === "HEALTHY") return "Healthy";
+
+  return String(value || "Needs review")
+    .trim()
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function compactUnique(values) {
+  const seen = new Set();
+  const result = [];
+
+  values.forEach(value => {
+    const text = String(value || "").trim();
+    const key = normalizeHealth(text);
+    if (!text || seen.has(key)) return;
+    seen.add(key);
+    result.push(text);
+  });
+
+  return result;
+}
+
+function formatCompactList(values, limit = 30) {
+  const visible = values.slice(0, limit);
+  const lines = visible.map(value => value);
+
+  if (values.length > limit) {
+    lines.push(`...and ${values.length - limit} more`);
+  }
+
+  return lines.length ? lines : ["-"];
+}
+
 function normalizeHealth(value) {
   return String(value || "").trim().toUpperCase();
 }
 
 function getPermissionIssues(row) {
-  const issues = [];
-
-  if (!isAllowed(row.smsPermission)) issues.push("Allow SMS");
-  if (!isAllowed(row.notificationListener)) issues.push("Allow Listener");
-  if (!isAllowed(row.appNotifications)) issues.push("Allow App Notif");
-  if (!isAllowed(row.fullScreenAlert)) issues.push("Allow Full Screen");
-  if (!isAllowed(row.batteryOptimizationDisabled)) issues.push("Allow Battery");
+  const issues = getPermissionIssueList(row);
 
   return issues.length ? issues.join(", ") : "OK";
+}
+
+function getPermissionIssueList(row) {
+  const issues = [];
+
+  if (!isAllowed(row.smsPermission)) issues.push("SMS");
+  if (!isAllowed(row.notificationListener)) issues.push("Listener");
+  if (!isAllowed(row.appNotifications)) issues.push("App Notif");
+  if (!isAllowed(row.fullScreenAlert)) issues.push("Full Screen");
+  if (!isAllowed(row.batteryOptimizationDisabled)) issues.push("Battery");
+
+  return issues;
 }
 
 function isAllowed(value) {
@@ -1390,4 +1616,13 @@ async function runPendingFollowUps() {
   }
 }
 
-module.exports = { sendTelegram, sendVideoTelegram, sendWalletHealthTelegram, deleteTelegramMessage, bot };
+module.exports = {
+  sendTelegram,
+  sendVideoTelegram,
+  sendWalletHealthTelegram,
+  sendBalanceOverviewTelegram,
+  sendBalanceOverviewImageTelegram,
+  deleteTelegramMessage,
+  getBot,
+  initializeBotFromSettings
+};
