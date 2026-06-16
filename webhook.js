@@ -1452,6 +1452,7 @@ app.delete("/api/wallet/daily-activity/clear", requirePermission("manage_wallets
 });
 
 app.get("/api/wallet/upload-status", requireAnyPermission([
+  "manage_wallets",
   "view_page_balance",
   "view_page_wallet_health",
   "wallet_health"
@@ -5367,6 +5368,115 @@ app.post("/api/video/update", requireVideoUpdatePermission, (req, res) => {
 
     res.json({ success: true });
   });
+});
+
+app.get("/api/video-cases/bulk-approve-template", requireAnyPermission([
+  "approve_transactions",
+  "export_transactions"
+]), (req, res) => {
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", "attachment; filename=video_case_approve_template.csv");
+  res.send("Ref,Reason\n");
+});
+
+app.post("/api/video-cases/bulk-approve-file", requirePermission("approve_transactions"), upload.single("file"), async (req, res) => {
+  const user = req.session?.user?.username || "unknown";
+
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: "No file uploaded" });
+  }
+
+  try {
+    const rows = parseSheetRows(req.file.path, req.file.originalname);
+    const { items, duplicates, invalid } = normalizeBulkApproveRows(rows);
+
+    if (!items.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid Ref rows found. File must include Ref and Reason columns.",
+        invalidRows: invalid
+      });
+    }
+
+    const approvedRefs = [];
+    const missingRefs = [];
+    const depositIds = [];
+    let updated = 0;
+
+    for (const item of items) {
+      const pendingRows = await dbAll(`
+        SELECT id, depositId
+        FROM video_cases
+        WHERE UPPER(TRIM(transactionReference)) = ?
+          AND (
+            actionStatus IS NULL
+            OR actionStatus = ''
+            OR actionStatus = 'PENDING'
+          )
+      `, [item.normalizedRef]);
+
+      if (!pendingRows.length) {
+        missingRefs.push(item.ref);
+        continue;
+      }
+
+      const result = await dbRun(`
+        UPDATE video_cases
+        SET
+          actionStatus = 'APPROVED',
+          reason = ?,
+          settledBy = ?,
+          settledAt = datetime('now', '+8 hours')
+        WHERE UPPER(TRIM(transactionReference)) = ?
+          AND (
+            actionStatus IS NULL
+            OR actionStatus = ''
+            OR actionStatus = 'PENDING'
+          )
+      `, [item.reason, user, item.normalizedRef]);
+
+      if (result.changes > 0) {
+        updated += result.changes;
+        approvedRefs.push(item.ref);
+        pendingRows.forEach(row => {
+          if (row.depositId) depositIds.push(row.depositId);
+        });
+      }
+    }
+
+    addLog(
+      "INFO",
+      `Bulk approved ${updated} video cases from ${req.file.originalname || "file"} (${approvedRefs.length} refs)`,
+      user
+    );
+
+    if (updated > 0) {
+      createNotification({
+        type: "BULK",
+        title: "Bulk Approved Video",
+        message: `${user} approved ${updated} video cases from file`,
+        meta: { depositIds },
+        target: "ALL"
+      });
+    }
+
+    res.json({
+      success: true,
+      totalFileRows: items.length + duplicates.length + invalid.length,
+      validRows: items.length,
+      updated,
+      matchedRefs: approvedRefs.length,
+      missingRefs,
+      duplicateRefs: duplicates,
+      invalidRows: invalid
+    });
+  } catch (err) {
+    console.error("Video bulk approve file failed:", err);
+    addLog("ERROR", `Video bulk approve file failed: ${err.message}`, user);
+    res.status(500).json({ success: false, message: err.message || "Video bulk approve failed" });
+  } finally {
+    fs.unlink(req.file.path, () => {});
+  }
 });
 
 app.get("/api/video/settled", requirePermission("view_page_settled_video"), (req, res) => {

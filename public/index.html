@@ -3535,6 +3535,26 @@
             min-width: 180px;
         }
 
+        .pending-filter-row,
+        .video-filter-row {
+            align-items: center;
+        }
+
+        .bulk-approve-inline-actions,
+        .video-bulk-approve-actions {
+            align-items: center;
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .bulk-approve-inline-actions button,
+        .video-bulk-approve-actions button {
+            border-radius: 8px;
+            height: 32px;
+            white-space: nowrap;
+        }
+
         .bulk-approve-status {
             background: #f8fafc;
             border: 1px solid #dbe4ef;
@@ -3566,6 +3586,18 @@
         /* hover effect */
         .toolbar-actions:hover {
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        @media (max-width: 992px) {
+            .pending-filter-row .ms-auto,
+            .video-filter-row .ms-auto {
+                margin-left: 0 !important;
+            }
+
+            .bulk-approve-inline-actions,
+            .video-bulk-approve-actions {
+                justify-content: flex-start;
+            }
         }
 
         .settled-toolbar {
@@ -6335,7 +6367,7 @@
                     <div id="syncStatus" style="display:none; color: orange; font-weight: bold; margin-bottom: 10px;">
                     </div>
 
-                    <div class="row mb-3 align-items-center g-2">
+                    <div class="row mb-3 align-items-center g-2 pending-filter-row">
 
                         <!-- 🔍 SEARCH -->
                         <div class="col-auto">
@@ -6396,6 +6428,10 @@
                             </select>
                         </div>
 
+
+                        <div class="col-auto ms-auto">
+                            <div id="pendingBulkApproveActions" class="bulk-approve-inline-actions"></div>
+                        </div>
 
                     </div>
 
@@ -6663,7 +6699,7 @@
                     <h3>Video Case</h3>
 
                     <!-- 🔍 FILTERS (same style as pending) -->
-                    <div class="row mb-3 align-items-center g-2">
+                    <div class="row mb-3 align-items-center g-2 video-filter-row">
 
                         <div class="col-auto">
                             <input type="text" id="videoSearch" class="form-control search-input"
@@ -6700,6 +6736,10 @@
                             </select>
                         </div>
 
+                        <div class="col-auto ms-auto">
+                            <div id="videoBulkApproveActions" class="video-bulk-approve-actions"></div>
+                        </div>
+
                     </div>
 
                     <!-- 🔥 TOOLBAR -->
@@ -6714,7 +6754,7 @@
                         </div>
 
                         <!-- RIGHT -->
-                        <div class="right-actions">
+                        <div id="videoActions" class="right-actions">
                             <button id="videoBulkSendBtn" class="btn btn-primary btn-sm">📤 Send Selected</button>
                             <button onclick="assignVideoAndSend()" class="btn btn-warning btn-sm">👥 Assign +
                                 Send</button>
@@ -9037,7 +9077,7 @@
                 initBulkApproveControls();
                 load();
             }
-            if (page === "video") { loadVideoCases(); initVideoBulkActions(); bindVideoFilters(); }
+            if (page === "video") { loadVideoCases(); initVideoBulkActions(); initVideoBulkApproveControls(); bindVideoFilters(); }
             if (page === "videoSettled") {
                 document.getElementById("videoSettledSearch").value = "";
                 document.getElementById("videoConfirmedFrom").value = "";
@@ -10098,6 +10138,7 @@
                 setUploadStatus(message, "success");
                 showToast(message, "success");
                 fileInput.value = "";
+                await loadBalanceUploadStatus();
                 loadWallets();
             } catch (err) {
                 console.error(err);
@@ -10176,6 +10217,7 @@
                 setUploadStatus(message, "success");
                 showToast(message, "success");
                 fileInput.value = "";
+                await loadBalanceUploadStatus();
                 loadWallets();
             } catch (err) {
                 console.error(err);
@@ -11693,7 +11735,7 @@
         }
 
         function initBulkApproveControls() {
-            const actions = document.getElementById("adminActions");
+            const actions = document.getElementById("pendingBulkApproveActions") || document.getElementById("adminActions");
             if (!actions || document.getElementById("bulkApproveFile")) return;
 
             actions.insertAdjacentHTML("beforeend", `
@@ -11702,9 +11744,11 @@
                 <button onclick="exportBulkApproveTemplate()" class="btn btn-outline-success btn-sm">Template</button>
             `);
 
+            const filterRow = actions.closest(".pending-filter-row");
             const toolbar = actions.closest(".toolbar-actions");
-            if (toolbar && !document.getElementById("bulkApproveStatus")) {
-                toolbar.insertAdjacentHTML("afterend", `<div id="bulkApproveStatus" class="bulk-approve-status" style="display:none;"></div>`);
+            const statusTarget = filterRow || toolbar;
+            if (statusTarget && !document.getElementById("bulkApproveStatus")) {
+                statusTarget.insertAdjacentHTML("afterend", `<div id="bulkApproveStatus" class="bulk-approve-status" style="display:none;"></div>`);
             }
         }
 
@@ -11784,6 +11828,104 @@
                 console.error(err);
                 setBulkApproveStatus(escapeHtml(err.message || "Bulk approve failed"), "error");
                 showToast("Bulk approve failed", "error");
+            }
+        }
+
+        function initVideoBulkApproveControls() {
+            const actions = document.getElementById("videoBulkApproveActions") || document.getElementById("videoActions");
+            if (!actions || document.getElementById("videoBulkApproveFile")) return;
+
+            actions.insertAdjacentHTML("beforeend", `
+                <input type="file" id="videoBulkApproveFile" class="form-control form-control-sm bulk-approve-file" accept=".csv,.xlsx">
+                <button onclick="bulkApproveVideoFromFile()" class="btn btn-success btn-sm">Approve File</button>
+                <button onclick="exportVideoBulkApproveTemplate()" class="btn btn-outline-success btn-sm">Template</button>
+            `);
+
+            const filterRow = actions.closest(".video-filter-row");
+            const toolbar = actions.closest(".toolbar-actions");
+            const statusTarget = filterRow || toolbar;
+            if (statusTarget && !document.getElementById("videoBulkApproveStatus")) {
+                statusTarget.insertAdjacentHTML("afterend", `<div id="videoBulkApproveStatus" class="bulk-approve-status" style="display:none;"></div>`);
+            }
+        }
+
+        function setVideoBulkApproveStatus(message, type = "") {
+            const el = document.getElementById("videoBulkApproveStatus");
+            if (!el) return;
+            el.innerHTML = message;
+            el.className = `bulk-approve-status ${type}`.trim();
+            el.style.display = message ? "block" : "none";
+        }
+
+        function exportVideoBulkApproveTemplate() {
+            window.location.href = "/api/video-cases/bulk-approve-template";
+        }
+
+        async function bulkApproveVideoFromFile() {
+            initVideoBulkApproveControls();
+            const input = document.getElementById("videoBulkApproveFile");
+            const file = input?.files?.[0];
+
+            if (!file) {
+                setVideoBulkApproveStatus("Choose a CSV or XLSX file with Ref and Reason columns.", "error");
+                showToast("Choose a video bulk approve file", "warning");
+                return;
+            }
+
+            const confirmed = await showConfirmModal(
+                `Approve video cases found in ${file.name}?`
+            );
+
+            if (!confirmed) return;
+
+            const formData = new FormData();
+            formData.append("file", file);
+            setVideoBulkApproveStatus(`Processing ${escapeHtml(file.name)}...`, "");
+            showToast("Processing video bulk approval...", "info");
+
+            try {
+                const res = await fetch("/api/video-cases/bulk-approve-file", {
+                    method: "POST",
+                    body: formData,
+                    credentials: "include"
+                });
+
+                const contentType = res.headers.get("content-type") || "";
+                const data = contentType.includes("application/json")
+                    ? await res.json()
+                    : {
+                        success: false,
+                        message: `Server returned ${res.status} ${res.statusText || ""}: ${(await res.text()).slice(0, 120)}`
+                    };
+
+                if (!res.ok || !data.success) {
+                    throw new Error(data.message || "Video bulk approve failed");
+                }
+
+                const missing = Array.isArray(data.missingRefs) ? data.missingRefs.length : 0;
+                const duplicates = Array.isArray(data.duplicateRefs) ? data.duplicateRefs.length : 0;
+                const invalid = Array.isArray(data.invalidRows) ? data.invalidRows.length : 0;
+
+                setVideoBulkApproveStatus(
+                    [
+                        `Approved ${Number(data.updated || 0).toLocaleString()} video rows from ${Number(data.matchedRefs || 0).toLocaleString()} refs.`,
+                        `Missing/not pending: ${missing.toLocaleString()}`,
+                        `Duplicates skipped: ${duplicates.toLocaleString()}`,
+                        `Invalid rows: ${invalid.toLocaleString()}`
+                    ].join(" - "),
+                    "success"
+                );
+
+                input.value = "";
+                videoSelectedIds.clear();
+                const selectAll = document.getElementById("videoSelectAll");
+                if (selectAll) selectAll.checked = false;
+                await loadVideoCases();
+                showToast(`Bulk approved ${data.updated || 0} video rows`, "success");
+            } catch (err) {
+                console.error(err);
+                setVideoBulkApproveStatus(escapeHtml(err.message || "Video bulk approve failed"), "error");
+                showToast("Video bulk approve failed", "error");
             }
         }
 
