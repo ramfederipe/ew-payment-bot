@@ -5166,11 +5166,12 @@ app.get("/api/video-case/filters", requirePermission("view_page_video_case"), (r
   const response = { brands: [], agents: [] };
 
   db.all(`
-    SELECT DISTINCT TRIM(brand) as brand
+    SELECT TRIM(brand) as brand
     FROM video_cases
     ${pendingWhere}
       AND brand IS NOT NULL
       AND TRIM(brand) != ''
+    GROUP BY TRIM(brand)
     ORDER BY LOWER(TRIM(brand))
   `, [], (brandErr, brandRows) => {
     if (brandErr) {
@@ -5181,11 +5182,12 @@ app.get("/api/video-case/filters", requirePermission("view_page_video_case"), (r
     response.brands = brandRows.map(row => row.brand);
 
     db.all(`
-      SELECT DISTINCT TRIM(agentName) as agentName
+      SELECT TRIM(agentName) as agentName
       FROM video_cases
       ${pendingWhere}
         AND agentName IS NOT NULL
         AND TRIM(agentName) != ''
+      GROUP BY TRIM(agentName)
       ORDER BY LOWER(TRIM(agentName))
     `, [], (agentErr, agentRows) => {
       if (agentErr) {
