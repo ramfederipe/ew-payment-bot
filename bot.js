@@ -1053,10 +1053,98 @@ async function sendBalanceOverviewImageTelegram(data) {
   return true;
 }
 
+async function sendBalanceOverviewFileTelegram(data) {
+  if (!ensureBotReady("send balance overview file")) return false;
+
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  if (!rows.length) return false;
+
+  const csvBuffer = buildBalanceOverviewCsvBuffer(rows);
+  const caption = buildBalanceOverviewFileCaption(data, rows);
+  const filename = buildBalanceOverviewFilename(data.agentGroup);
+
+  await bot.sendDocument(
+    data.chatId,
+    csvBuffer,
+    caption ? { caption } : {},
+    { filename, contentType: "text/csv" }
+  );
+
+  return true;
+}
+
 function buildBalanceOverviewImageCaption(data) {
   const messageText = cleanTelegramLine(data.messageText);
 
   return messageText.slice(0, 1000);
+}
+
+function buildBalanceOverviewFileCaption(data, rows) {
+  const messageText = data.includeMessageText === false
+    ? ""
+    : cleanTelegramLine(data.messageText);
+  const lines = [
+    `Balance Overview CSV - ${cleanTelegramLine(data.agentGroup || "-")}`,
+    `Wallets: ${rows.length}`
+  ];
+
+  if (messageText) {
+    lines.push("", messageText);
+  }
+
+  return lines.join("\n").slice(0, 1000);
+}
+
+function buildBalanceOverviewCsvBuffer(rows) {
+  const labels = [];
+
+  rows.forEach(row => {
+    (Array.isArray(row.values) ? row.values : []).forEach(field => {
+      const label = cleanTelegramLine(field.label || "-");
+      if (label && !labels.includes(label)) labels.push(label);
+    });
+  });
+
+  if (!labels.some(label => label.toLowerCase() === "owner")) {
+    labels.unshift("Owner");
+  }
+
+  const csvRows = [
+    labels.map(escapeCsvValue).join(",")
+  ];
+
+  rows.forEach(row => {
+    const fieldMap = new Map(
+      (Array.isArray(row.values) ? row.values : [])
+        .map(field => [cleanTelegramLine(field.label || "-"), cleanTelegramLine(field.value || "-")])
+    );
+
+    csvRows.push(labels.map(label => {
+      const value = label.toLowerCase() === "owner" && !fieldMap.has(label)
+        ? row.ownerName || "-"
+        : fieldMap.get(label) || "-";
+      return escapeCsvValue(value);
+    }).join(","));
+  });
+
+  return Buffer.from(`\ufeff${csvRows.join("\n")}`, "utf8");
+}
+
+function escapeCsvValue(value) {
+  const text = cleanTelegramLine(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function buildBalanceOverviewFilename(agentGroup) {
+  const group = cleanTelegramLine(agentGroup || "group")
+    .replace(/[^a-z0-9_-]+/gi, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 40) || "group";
+  const stamp = new Date().toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}Z$/, "Z");
+
+  return `balance_overview_${group}_${stamp}.csv`;
 }
 
 function buildBalanceOverviewMessage(data, rows) {
@@ -1622,6 +1710,7 @@ module.exports = {
   sendWalletHealthTelegram,
   sendBalanceOverviewTelegram,
   sendBalanceOverviewImageTelegram,
+  sendBalanceOverviewFileTelegram,
   deleteTelegramMessage,
   getBot,
   initializeBotFromSettings

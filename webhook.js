@@ -11,6 +11,7 @@ const {
   sendWalletHealthTelegram,
   sendBalanceOverviewTelegram,
   sendBalanceOverviewImageTelegram,
+  sendBalanceOverviewFileTelegram,
   deleteTelegramMessage,
   getBot,
   initializeBotFromSettings
@@ -18,6 +19,11 @@ const {
 const db = require("./db");
 const now = new Date().toISOString();
 const { updateStatusByRef } = require("./gsheet");
+const {
+  runAgentGsheetSync,
+  extractSpreadsheetId: extractAgentSpreadsheetId,
+  normalizeAccountName
+} = require("./agentGsheet");
 const {
   DEFAULT_SYNC_COLUMN_MAP,
   DEFAULT_UPDATE_COLUMN_MAP,
@@ -30,10 +36,13 @@ const csv = require("csv-parser");
 const fs = require("fs");
 const zlib = require("zlib");
 const { google } = require("googleapis");
+const uploadsDir = path.join(__dirname, "uploads");
+
+fs.mkdirSync(uploadsDir, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "uploads/");
+    cb(null, uploadsDir);
   },
 
   filename: (req, file, cb) => {
@@ -265,6 +274,102 @@ function normalizeBalanceCalculationSettings(value) {
   };
 }
 
+const BALANCE_WATCHLIST_COLUMNS = new Set([
+  "ownerName", "walletType", "agentGroup", "openingBalance", "todayDeposits",
+  "todayWithdrawals", "settlement", "apiBalance", "balance", "depositDailyLimit",
+  "remaining", "depositPriority", "withdrawalPriority", "status",
+  "recommendation", "action", "walletCondition", "remarks"
+]);
+
+const BALANCE_WATCHLIST_NUMERIC_COLUMNS = new Set([
+  "openingBalance", "todayDeposits", "todayWithdrawals", "settlement",
+  "apiBalance", "balance", "depositDailyLimit", "remaining",
+  "depositPriority", "withdrawalPriority"
+]);
+
+function normalizeBalanceWatchlistSections(value) {
+  let sections = value;
+
+  if (typeof value === "string" && value.trim()) {
+    try {
+      sections = JSON.parse(value);
+    } catch (err) {
+      sections = [];
+    }
+  }
+
+  if (!Array.isArray(sections)) return [];
+
+  const cleanText = (input, max = 120) => String(input || "").trim().slice(0, max);
+  const optionalNumber = (input) => {
+    if (input === "" || input === null || input === undefined) return null;
+    const number = Number(input);
+    return Number.isFinite(number) ? number : null;
+  };
+  const allowedOperators = new Set(["any", "gt", "gte", "lt", "lte", "eq"]);
+  const allowedAccess = new Set(["any", "open", "closed"]);
+  const allowedStates = new Set(["", "FULL", "DEPOSIT_ONLY", "WITHDRAW_ONLY", "UNAVAILABLE", "INACTIVE"]);
+  const allowedPresenceModes = new Set(["any", "has", "none"]);
+  const normalizeColor = (input, fallback) => {
+    const color = String(input || "").trim();
+    return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : fallback;
+  };
+
+  return sections.slice(0, 30).map((section, index) => {
+    const source = section && typeof section === "object" ? section : {};
+    const columns = Array.isArray(source.columns)
+      ? [...new Set(source.columns.filter(column => BALANCE_WATCHLIST_COLUMNS.has(column)))].slice(0, 18)
+      : [];
+    const amount = Number(source.amount);
+    const states = Array.isArray(source.states)
+      ? [...new Set(source.states.filter(state => allowedStates.has(state) && state))].slice(0, 5)
+      : (allowedStates.has(source.state) && source.state ? [source.state] : []);
+
+    return {
+      id: cleanText(source.id || `shared-${Date.now()}-${index}`, 100),
+      template: cleanText(source.template || "custom", 60),
+      name: cleanText(source.name || `Watchlist ${index + 1}`, 80),
+      metric: BALANCE_WATCHLIST_COLUMNS.has(source.metric) ? source.metric : "balance",
+      thresholdMode: source.thresholdMode === "daily_limit" ? "daily_limit" : "fixed",
+      operator: allowedOperators.has(source.operator) ? source.operator : "any",
+      amount: Number.isFinite(amount) && amount >= 0 ? amount : 0,
+      state: states.length === 1 ? states[0] : "",
+      states,
+      depositAccess: allowedAccess.has(source.depositAccess) ? source.depositAccess : "any",
+      withdrawalAccess: allowedAccess.has(source.withdrawalAccess) ? source.withdrawalAccess : "any",
+      accountType: cleanText(source.accountType, 30),
+      walletType: cleanText(source.walletType, 50),
+      condition: cleanText(source.condition, 80),
+      recommendation: cleanText(source.recommendation, 80),
+      action: cleanText(source.action, 80),
+      dpMin: optionalNumber(source.dpMin),
+      dpMax: optionalNumber(source.dpMax),
+      wdMin: optionalNumber(source.wdMin),
+      wdMax: optionalNumber(source.wdMax),
+      ownerQuery: cleanText(source.ownerQuery, 500),
+      ownerExcludeQuery: cleanText(source.ownerExcludeQuery, 500),
+      apiBalanceMin: optionalNumber(source.apiBalanceMin),
+      apiBalanceMax: optionalNumber(source.apiBalanceMax),
+      balanceMin: optionalNumber(source.balanceMin),
+      balanceMax: optionalNumber(source.balanceMax),
+      remarksQuery: cleanText(source.remarksQuery, 500),
+      remarksPrefixQuery: cleanText(source.remarksPrefixQuery, 500),
+      remarksExcludeQuery: cleanText(source.remarksExcludeQuery, 500),
+      presenceColumn: BALANCE_WATCHLIST_NUMERIC_COLUMNS.has(source.presenceColumn) ? source.presenceColumn : "",
+      presenceMode: allowedPresenceModes.has(source.presenceMode) ? source.presenceMode : "any",
+      useCustomColors: source.useCustomColors === true,
+      headerColor: normalizeColor(source.headerColor, "#3b0f1c"),
+      nameColor: normalizeColor(source.nameColor, "#fecdd3"),
+      hideInactive: source.hideInactive !== false,
+      excludeBundles: source.excludeBundles === true,
+      sortField: BALANCE_WATCHLIST_COLUMNS.has(source.sortField) ? source.sortField : "balance",
+      sortOrder: source.sortOrder === "asc" ? "asc" : "desc",
+      rowLimit: Math.min(500, Math.max(1, Math.floor(Number(source.rowLimit) || 100))),
+      columns: columns.length ? columns : ["ownerName", "walletType", "balance"]
+    };
+  });
+}
+
 function normalizeManualReplyParser(value) {
   let parser = value;
 
@@ -311,6 +416,14 @@ app.use(checkAccountStatus);
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    service: "ew-payment-bot",
+    uptime: process.uptime()
+  });
 });
 
 // 📥 WEBHOOK (REAL PAYMENT)
@@ -709,13 +822,13 @@ app.post("/api/sync", requirePermission("sync_sheets"), async (req, res) => {
 
 app.get("/api/brands", requirePermission("view_page_pending_deposits"), (req, res) => {
   db.all(`
-    SELECT TRIM(brand) as brand
+    SELECT MIN(TRIM(brand)) as brand
     FROM transactions
     WHERE (actionStatus IS NULL OR actionStatus = 'PENDING')
       AND brand IS NOT NULL
       AND TRIM(brand) != ''
     GROUP BY LOWER(TRIM(brand))
-    ORDER BY brand COLLATE NOCASE ASC
+    ORDER BY MIN(TRIM(brand)) COLLATE NOCASE ASC
   `, (err, rows) => {
     if (err) {
       console.error("Brands load error:", err);
@@ -735,10 +848,22 @@ const server = http.createServer(app);
 init(server); // ✅ initialize socket
 
 loadSettings();
-server.listen(process.env.PORT, "0.0.0.0", () => {
-  console.log(`Server running on port ${process.env.PORT}`);
-  addLog("INFO", `Server started on port ${process.env.PORT}`);
+const PORT = process.env.PORT || 3001;
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
+  addLog("INFO", `Server started on port ${PORT}`);
 });
+
+async function runScheduledAgentGsheetSync() {
+  try {
+    await runAgentGsheetSync();
+  } catch (err) {
+    console.error("Agent GSheet sync failed:", err.message);
+  }
+}
+
+setTimeout(runScheduledAgentGsheetSync, 20_000).unref?.();
+setInterval(runScheduledAgentGsheetSync, 60_000).unref?.();
 
 app.post("/api/update", requireTransactionUpdatePermission, async (req, res) => {
   const { ref, status, reason, username } = req.body;
@@ -888,8 +1013,10 @@ app.post("/api/upload-wallet", requirePermission("manage_wallets"), upload.singl
           remarks, createdAt, uploadedAt
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
+      let insertedRows = 0;
+      const failedRows = [];
 
-      results.forEach(row => {
+      results.forEach((row, index) => {
 
         stmt.run([
           row["Wallet Account ID"] || "",
@@ -903,47 +1030,68 @@ app.post("/api/upload-wallet", requirePermission("manage_wallets"), upload.singl
           parseMoney(row["Balance"] || row["Opening Balance"] || row["Opening"] || 0),
           row["Status"] || "",
           row["Agent Group"] || "",
-          row["Deposit Daily Limit"] || 0,
-          row["Withdrawal Daily Limit"] || 0,
-          row["Today Deposits"] || 0,
-          row["Today Withdrawals"] || 0,
-          row["Deposit Priority"] || 0,
-          row["Withdrawal Priority"] || 0,
+          parseMoney(row["Deposit Daily Limit"]),
+          parseMoney(row["Withdrawal Daily Limit"]),
+          parseMoney(row["Today Deposits"]),
+          parseMoney(row["Today Withdrawals"]),
+          parseMoney(row["Deposit Priority"]),
+          parseMoney(row["Withdrawal Priority"]),
           row["Remarks"] || "",
           row["Created At"] || "",
           uploadedAt
-        ]);
+        ], (rowErr) => {
+          if (rowErr) {
+            failedRows.push({
+              row: index + 2,
+              ownerName: row["Owner Name"] || "",
+              walletType: row["Wallet Type"] || "",
+              message: rowErr.message
+            });
+          } else {
+            insertedRows += 1;
+          }
+        });
 
       });
 
       stmt.finalize((err) => {
 
-        if (err) {
-          console.error(err);
-          addLog("ERROR", `Wallet upload failed: ${err.message}`, user);
+        if (err || failedRows.length) {
+          const message = err?.message || failedRows[0]?.message || "Unknown row error";
+          console.error("Wallet upload failed:", message, failedRows.slice(0, 5));
+          addLog(
+            "ERROR",
+            `Wallet upload incomplete (${insertedRows}/${results.length} rows inserted): ${message}`,
+            user
+          );
+          fs.unlink(req.file.path, () => {});
 
           return res.status(500).json({
-            success: false
+            success: false,
+            message: `Wallet upload incomplete: ${insertedRows}/${results.length} rows inserted`,
+            inserted: insertedRows,
+            failed: failedRows.length,
+            errors: failedRows.slice(0, 10)
           });
         }
 
         fs.unlinkSync(req.file.path);
 
         console.log("✅ Wallets uploaded:", results.length);
-        addLog("INFO", `Wallet upload completed (${results.length} rows from ${fileName})`, user);
+        addLog("INFO", `Wallet upload completed (${insertedRows} rows from ${fileName})`, user);
 
         // ✅ FIX
         const io = getIO();
 
         io.emit("walletUpdated", {
           updatedBy: req.session.user.username,
-          total: results.length,
+          total: insertedRows,
           time: new Date().toLocaleString()
         });
 
         res.json({
           success: true,
-          total: results.length,
+          total: insertedRows,
           uploadedAt,
           fileName
         });
@@ -968,7 +1116,7 @@ app.get("/api/wallet/list-upload-status", requirePermission("view_page_wallet"),
 
     res.json({
       success: true,
-      rowCount: Number(row?.rowCount || 0),
+      rowCount: getDbCount(row),
       uploadedAt: row?.uploadedAt || null
     });
   });
@@ -1181,6 +1329,93 @@ function normalizeBulkApproveRows(rows) {
   return { items, duplicates, invalid };
 }
 
+function normalizeBulkDepositBrand(value) {
+  return String(value || "")
+    .trim()
+    .split(/\s+-\s+/)[0]
+    .trim();
+}
+
+function normalizeBulkDepositRows(rows) {
+  const requiredAliases = {
+    ref: ["Gateway Transaction ID"],
+    depositId: ["Vendor ID"],
+    brand: ["Merchant Name"],
+    agent: ["Wallet Owner"],
+    customer: ["Customer Phone"],
+    amount: ["SMS Amount"]
+  };
+  const headerMatch = findHeaderMapping(rows, requiredAliases);
+
+  if (!headerMatch) {
+    throw new Error(
+      "Required columns: Gateway Transaction ID, Vendor ID, Merchant Name, Wallet Owner, Customer Phone, SMS Amount"
+    );
+  }
+
+  const { headerIndex, mapping } = headerMatch;
+  const seen = new Set();
+  const items = [];
+  const duplicates = [];
+  const invalid = [];
+  let totalRows = 0;
+
+  rows.slice(headerIndex + 1).forEach((row, index) => {
+    if (!row.some(cell => String(cell ?? "").trim())) return;
+
+    totalRows += 1;
+    const rowNumber = headerIndex + index + 2;
+    const ref = String(row[mapping.ref] ?? "").trim();
+    const depositId = String(row[mapping.depositId] ?? "").trim();
+    const brand = normalizeBulkDepositBrand(row[mapping.brand]);
+    const agent = String(row[mapping.agent] ?? "").trim();
+    const customer = String(row[mapping.customer] ?? "").trim();
+    const amount = parseMoney(row[mapping.amount]);
+    const missing = [];
+
+    if (!ref) missing.push("Gateway Transaction ID");
+    if (!depositId) missing.push("Vendor ID");
+    if (!brand) missing.push("Merchant Name");
+    if (!agent) missing.push("Wallet Owner");
+    if (!customer) missing.push("Customer Phone");
+
+    if (missing.length || amount <= 0) {
+      invalid.push({
+        row: rowNumber,
+        reason: missing.length
+          ? `Missing ${missing.join(", ")}`
+          : "SMS Amount must be greater than zero"
+      });
+      return;
+    }
+
+    const normalizedRef = normalizeMatchValue(ref);
+    const normalizedDepositId = normalizeMatchValue(depositId);
+    const key = `${normalizedRef}|${normalizedDepositId}`;
+
+    if (seen.has(key)) {
+      duplicates.push({ row: rowNumber, ref, depositId });
+      return;
+    }
+
+    seen.add(key);
+    items.push({
+      row: rowNumber,
+      ref,
+      normalizedRef,
+      depositId,
+      normalizedDepositId,
+      brand,
+      agent,
+      customer,
+      amount,
+      key
+    });
+  });
+
+  return { items, duplicates, invalid, totalRows };
+}
+
 function normalizeOpeningBalanceRows(rows, shopColumn, balanceColumn) {
   const normalizedShop = normalizeMatchValue(shopColumn || "SHOP");
   const normalizedBalance = normalizeMatchValue(balanceColumn || "BALANCE");
@@ -1213,30 +1448,61 @@ function findHeaderIndex(rows, requiredHeaders) {
   });
 }
 
-function normalizeDailyActivityRows(rows, direction) {
-  const isDeposit = direction === "deposit";
-  const ownerHeader = isDeposit ? "Wallet Owner Name" : "Owner Name";
-  const requiredHeaders = [ownerHeader, "Wallet Type", "Amount", "Status"];
-  const headerIndex = findHeaderIndex(rows, requiredHeaders);
+function findHeaderMapping(rows, requiredAliases) {
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const cells = rows[rowIndex].map(normalizeMatchValue);
+    const mapping = {};
+    let matched = true;
 
-  if (headerIndex < 0) {
-    throw new Error(`Could not find headers ${requiredHeaders.join(", ")}`);
+    for (const [field, aliases] of Object.entries(requiredAliases)) {
+      const index = aliases
+        .map(normalizeMatchValue)
+        .map(alias => cells.indexOf(alias))
+        .find(aliasIndex => aliasIndex >= 0);
+
+      if (index === undefined) {
+        matched = false;
+        break;
+      }
+
+      mapping[field] = index;
+    }
+
+    if (matched) {
+      return { headerIndex: rowIndex, mapping };
+    }
   }
 
-  const headers = rows[headerIndex].map(normalizeMatchValue);
-  const ownerIndex = headers.indexOf(normalizeMatchValue(ownerHeader));
-  const walletTypeIndex = headers.indexOf(normalizeMatchValue("Wallet Type"));
-  const amountIndex = headers.indexOf(normalizeMatchValue("Amount"));
-  const statusIndex = headers.indexOf(normalizeMatchValue("Status"));
+  return null;
+}
+
+function normalizeDailyActivityRows(rows, direction) {
+  const isDeposit = direction === "deposit";
+  const ownerAliases = isDeposit
+    ? ["Wallet Owner Name", "Owner Name", "Owner", "Shop", "Shop Name"]
+    : ["Owner Name", "Wallet Owner Name", "Owner", "Shop", "Shop Name"];
+  const headerMatch = findHeaderMapping(rows, {
+    ownerName: ownerAliases,
+    walletType: ["Wallet Type", "Type", "Wallet", "Payment Method"],
+    amount: ["Amount", "Total Amount", "Transaction Amount", "Payable Amount"],
+    status: ["Status", "Transaction Status", "Payment Status"]
+  });
+
+  if (!headerMatch) {
+    throw new Error("Could not find required headers: Owner, Wallet Type, Amount, Status");
+  }
+
+  const { headerIndex, mapping } = headerMatch;
   const totals = new Map();
+  const completedStatuses = new Set(["COMPLETED", "COMPLETE", "SUCCESS", "SUCCESSFUL", "PAID", "APPROVED"]);
 
   rows.slice(headerIndex + 1).forEach(row => {
-    const ownerName = String(row[ownerIndex] || "").trim();
-    const walletType = String(row[walletTypeIndex] || "").trim();
-    const status = String(row[statusIndex] || "").trim();
-    const amount = parseMoney(row[amountIndex]);
+    const ownerName = String(row[mapping.ownerName] || "").trim();
+    const walletType = String(row[mapping.walletType] || "").trim();
+    const status = String(row[mapping.status] || "").trim();
+    const amount = parseMoney(row[mapping.amount]);
 
-    if (!ownerName || !walletType || normalizeMatchValue(status) !== "COMPLETED") return;
+    if (!ownerName || !walletType || !completedStatuses.has(normalizeMatchValue(status))) return;
 
     const key = `${normalizeMatchValue(ownerName)}|${normalizeMatchValue(walletType)}`;
     const current = totals.get(key) || {
@@ -1252,7 +1518,12 @@ function normalizeDailyActivityRows(rows, direction) {
     totals.set(key, current);
   });
 
-  return [...totals.values()];
+  const output = [...totals.values()];
+  if (!output.length) {
+    throw new Error("No completed owner/type rows found. Check Owner, Wallet Type, Amount, and Status values.");
+  }
+
+  return output;
 }
 
 function getOpeningBalanceColumns(callback) {
@@ -1266,6 +1537,7 @@ function getOpeningBalanceColumns(callback) {
 
 app.post("/api/wallet/opening-balance/upload", requirePermission("manage_wallets"), upload.single("file"), (req, res) => {
   const user = getLogUser(req);
+  const uploadedAt = new Date().toISOString();
 
   if (!req.file) {
     return res.status(400).json({ success: false, message: "File is required" });
@@ -1296,7 +1568,7 @@ app.post("/api/wallet/opening-balance/upload", requirePermission("manage_wallets
 
       const stmt = db.prepare(`
         INSERT INTO opening_balances (shop, normalizedShop, openingBalance, uploadedAt)
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?)
         ON CONFLICT(normalizedShop) DO UPDATE SET
           shop = excluded.shop,
           openingBalance = excluded.openingBalance,
@@ -1304,7 +1576,7 @@ app.post("/api/wallet/opening-balance/upload", requirePermission("manage_wallets
       `);
 
       rows.forEach(row => {
-        stmt.run(row.shop, normalizeMatchValue(row.shop), row.balance);
+        stmt.run(row.shop, normalizeMatchValue(row.shop), row.balance, uploadedAt);
       });
 
       stmt.finalize((err) => {
@@ -1475,7 +1747,7 @@ app.get("/api/wallet/upload-status", requireAnyPermission([
     }
 
     files.opening = {
-      rowCount: Number(openingRow?.rowCount || 0),
+      rowCount: getDbCount(openingRow),
       uploadedAt: openingRow?.uploadedAt || null
     };
 
@@ -1492,7 +1764,7 @@ app.get("/api/wallet/upload-status", requireAnyPermission([
       (activityRows || []).forEach(row => {
         const direction = row.direction === "withdrawal" ? "withdrawal" : "deposit";
         files[direction] = {
-          rowCount: Number(row.rowCount || 0),
+          rowCount: getDbCount(row),
           uploadedAt: row.uploadedAt || null
         };
       });
@@ -1502,7 +1774,13 @@ app.get("/api/wallet/upload-status", requireAnyPermission([
   });
 });
 
+function getDbCount(row) {
+  return Number(row?.rowCount ?? row?.rowcount ?? row?.count ?? 0);
+}
+
 app.get("/api/wallets", requirePermission("view_page_wallet"), (req, res) => {
+  res.set("Cache-Control", "no-store");
+
   db.all(`
     SELECT * FROM wallets ORDER BY id DESC
   `, (err, rows) => {
@@ -1764,6 +2042,7 @@ app.post("/api/balance/overview/send", requirePermission("send_telegram"), async
   const imageGroups = normalizeBalanceOverviewImageGroups(req.body.imageGroups);
   const imagesByGroup = new Map(imageGroups.map(group => [group.agentGroup.toUpperCase(), group]));
   const messageText = cleanBalanceOverviewSendText(req.body.messageText, 1500);
+  const fileMode = req.body.fileMode === true || req.body.fileMode === "true";
 
   if (!rows.length) {
     return res.status(400).json({ success: false, message: "No overview rows selected" });
@@ -1814,8 +2093,9 @@ app.post("/api/balance/overview/send", requirePermission("send_telegram"), async
       }
 
       const imageGroup = imagesByGroup.get(group.toUpperCase());
+      const hasImages = Boolean(imageGroup?.images?.length);
 
-      if (imageGroup?.images?.length) {
+      if (hasImages) {
         await sendBalanceOverviewImageTelegram({
           chatId: chatRow.chatId,
           agentGroup: group,
@@ -1823,7 +2103,19 @@ app.post("/api/balance/overview/send", requirePermission("send_telegram"), async
           images: imageGroup.images,
           messageText
         });
-      } else {
+      }
+
+      if (fileMode) {
+        await sendBalanceOverviewFileTelegram({
+          chatId: chatRow.chatId,
+          agentGroup: group,
+          rows: groupRows,
+          messageText,
+          includeMessageText: !hasImages
+        });
+      }
+
+      if (!hasImages && !fileMode) {
         await sendBalanceOverviewTelegram({
           chatId: chatRow.chatId,
           agentGroup: group,
@@ -2534,6 +2826,55 @@ app.get("/api/balance/calculation-settings", requirePermission("view_page_balanc
   });
 });
 
+app.get("/api/balance/watchlist-settings", requirePermission("view_page_balance"), (req, res) => {
+  const role = req.session?.user?.role;
+  const sendSettings = (canEdit) => {
+    db.get(`SELECT balanceWatchlistSections FROM settings WHERE id = 1`, (err, row) => {
+      if (err) {
+        console.error("Watchlist settings load failed:", err.message);
+        return res.status(500).json({ success: false, sections: [], canEdit: false });
+      }
+
+      res.json({
+        success: true,
+        canEdit,
+        sections: normalizeBalanceWatchlistSections(row?.balanceWatchlistSections)
+      });
+    });
+  };
+
+  if (role === "developer") return sendSettings(true);
+
+  db.get(`
+    SELECT allowed
+    FROM role_permissions
+    WHERE role = ? AND permission = 'settings_access'
+  `, [role], (err, permission) => {
+    sendSettings(!err && permission?.allowed === 1);
+  });
+});
+
+app.post("/api/balance/watchlist-settings", requirePermission("settings_access"), (req, res) => {
+  const sections = normalizeBalanceWatchlistSections(req.body?.sections);
+  const payload = JSON.stringify(sections);
+  const user = getLogUser(req);
+
+  db.run(`
+    INSERT INTO settings (id, balanceWatchlistSections)
+    VALUES (1, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      balanceWatchlistSections = excluded.balanceWatchlistSections
+  `, [payload], (err) => {
+    if (err) {
+      console.error("Watchlist settings save failed:", err.message);
+      return res.status(500).json({ success: false, message: "Watchlist save failed" });
+    }
+
+    addLog("INFO", `Shared balance watchlist updated (${sections.length} sections)`, user);
+    res.json({ success: true, sections });
+  });
+});
+
 async function getSettlementSheetDeductions() {
   const settings = await new Promise((resolve) => {
     db.get(`
@@ -2799,7 +3140,7 @@ app.get("/api/agent-performance", requirePermission("view_page_dashboard"), (req
     FROM transactions
     ${where}
     GROUP BY agentName
-    ORDER BY total DESC
+    ORDER BY COUNT(*) DESC
   `, (err, rows) => {
     res.json(rows);
   });
@@ -2827,9 +3168,9 @@ app.get("/api/agent-performance-today", requirePermission("view_page_dashboard")
 
     GROUP BY agentName
 
-    HAVING total > 3   -- 🔥 ONLY agents with more than 3
+    HAVING COUNT(*) > 3   -- 🔥 ONLY agents with more than 3
 
-    ORDER BY total DESC
+    ORDER BY COUNT(*) DESC
 
     LIMIT 10           -- 🔥 TOP 10 ONLY
 
@@ -2883,7 +3224,7 @@ app.get("/api/dashboard/settled-stats", requirePermission("view_page_dashboard")
 
   GROUP BY agentName
 
-  ORDER BY total DESC
+  ORDER BY COUNT(*) DESC
   LIMIT 10
 `;
 
@@ -3660,6 +4001,129 @@ app.post("/api/transactions/bulk-reject", requirePermission("reject_transactions
       );
     }
   );
+});
+
+app.post("/api/transactions/bulk-add-file", requirePermission("edit_transaction"), upload.single("file"), async (req, res) => {
+  const user = req.session?.user?.username || "unknown";
+
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: "No file uploaded" });
+  }
+
+  try {
+    const rows = parseSheetRows(req.file.path, req.file.originalname);
+    const { items, duplicates, invalid, totalRows } = normalizeBulkDepositRows(rows);
+
+    if (!items.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid deposit rows found in the file.",
+        duplicateRows: duplicates,
+        invalidRows: invalid
+      });
+    }
+
+    const existingKeys = new Set();
+    const normalizedRefs = [...new Set(items.map(item => item.normalizedRef))];
+
+    for (let offset = 0; offset < normalizedRefs.length; offset += 500) {
+      const refChunk = normalizedRefs.slice(offset, offset + 500);
+      const placeholders = refChunk.map(() => "?").join(",");
+      const existingRows = await dbAll(`
+        SELECT transactionReference, depositId
+        FROM transactions
+        WHERE UPPER(TRIM(COALESCE(transactionReference, ''))) IN (${placeholders})
+      `, refChunk);
+
+      existingRows.forEach(row => {
+        existingKeys.add(
+          `${normalizeMatchValue(row.transactionReference)}|${normalizeMatchValue(row.depositId)}`
+        );
+      });
+    }
+
+    const existing = [];
+    const insertedDepositIds = [];
+    let inserted = 0;
+
+    for (const item of items) {
+      if (existingKeys.has(item.key)) {
+        existing.push({ row: item.row, ref: item.ref, depositId: item.depositId });
+        continue;
+      }
+
+      const result = await dbRun(`
+        INSERT INTO transactions (
+          transactionReference,
+          depositId,
+          agentName,
+          customerNumber,
+          amount,
+          depositDate,
+          agentNumber,
+          imageLink,
+          essStatus,
+          status,
+          actionStatus,
+          agentStatus,
+          brand
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        item.ref,
+        item.depositId,
+        item.agent,
+        item.customer,
+        item.amount,
+        "",
+        "",
+        "",
+        "MANUAL",
+        "PENDING",
+        "PENDING",
+        null,
+        item.brand
+      ]);
+
+      if (result.changes > 0) {
+        inserted += result.changes;
+        insertedDepositIds.push(item.depositId);
+        existingKeys.add(item.key);
+      }
+    }
+
+    addLog(
+      "INFO",
+      `Bulk added ${inserted} pending deposits from ${req.file.originalname || "file"}`,
+      user
+    );
+
+    if (inserted > 0) {
+      createNotification({
+        type: "BULK",
+        title: "Bulk Deposits Added",
+        message: `${user} added ${inserted} pending deposits from file`,
+        meta: { depositIds: insertedDepositIds },
+        target: "ALL"
+      });
+    }
+
+    res.json({
+      success: true,
+      totalFileRows: totalRows,
+      validRows: items.length,
+      inserted,
+      existingRows: existing,
+      duplicateRows: duplicates,
+      invalidRows: invalid
+    });
+  } catch (err) {
+    console.error("Bulk add deposit file failed:", err);
+    addLog("ERROR", `Bulk add deposit file failed: ${err.message}`, user);
+    res.status(400).json({ success: false, message: err.message || "Bulk add deposits failed" });
+  } finally {
+    fs.unlink(req.file.path, () => {});
+  }
 });
 
 app.get("/api/transactions/bulk-approve-template", requireAnyPermission([
@@ -4518,15 +4982,16 @@ app.post("/api/upload-chatids", requirePermission("manage_chat_ids"), upload.sin
     .on("end", () => {
 
       const stmt = db.prepare(`
-        INSERT INTO chat_ids (agentName, groupName, chatId)
-        VALUES (?, ?, ?)
+        INSERT INTO chat_ids (agentName, groupName, chatId, gsheetLink)
+        VALUES (?, ?, ?, ?)
       `);
 
       results.forEach(row => {
         stmt.run([
           row["Agent"] || "",
           row["Group"] || "",
-          row["Chat ID"] || ""
+          row["Chat ID"] || "",
+          row["GSheet Link"] || row["Gsheet Link"] || ""
         ]);
       });
 
@@ -4544,7 +5009,7 @@ app.post("/api/chatids/clean-duplicates", requirePermission("manage_chat_ids"), 
     SELECT groupName, chatId, COUNT(*) as count
     FROM chat_ids
     GROUP BY groupName, chatId
-    HAVING count > 1
+    HAVING COUNT(*) > 1
   `, (err, rows) => {
 
     if (err) {
@@ -4602,12 +5067,16 @@ app.post("/api/chatids", requirePermission("manage_chat_ids"), (req, res) => {
     });
   }
 
-  const { agentName, groupName, chatId } = req.body;
+  const { agentName, groupName, chatId, gsheetLink } = req.body;
+  const cleanGsheetLink = String(gsheetLink || "").trim();
+  if (cleanGsheetLink && !extractAgentSpreadsheetId(cleanGsheetLink)) {
+    return res.status(400).json({ success: false, message: "Invalid Google Sheet link or spreadsheet ID" });
+  }
 
   db.run(`
-    INSERT INTO chat_ids (agentName, groupName, chatId)
-    VALUES (?, ?, ?)
-  `, [agentName, groupName, chatId], function(err) {
+    INSERT INTO chat_ids (agentName, groupName, chatId, gsheetLink)
+    VALUES (?, ?, ?, ?)
+  `, [agentName, groupName, chatId, cleanGsheetLink], function(err) {
 
     if (err) {
       console.error(err);
@@ -4684,7 +5153,21 @@ app.get("/api/dashboard", requirePermission("view_page_dashboard"), (req, res) =
 
                   // ===== TOTAL AMOUNT =====
                   db.get(`
-                    SELECT SUM(amount) as total
+                    SELECT
+                      COALESCE(SUM(
+                        CASE
+                          WHEN amount BETWEEN -9007199254740991 AND 9007199254740991
+                          THEN amount
+                          ELSE 0
+                        END
+                      ), 0) as total,
+                      SUM(
+                        CASE
+                          WHEN amount < -9007199254740991 OR amount > 9007199254740991
+                          THEN 1
+                          ELSE 0
+                        END
+                      ) as invalidAmountCount
                     FROM transactions
                   `, (err, amountRow) => {
 
@@ -4729,19 +5212,20 @@ app.get("/api/dashboard", requirePermission("view_page_dashboard"), (req, res) =
 
                               // ✅ FINAL RESPONSE (ONLY ONCE)
                               res.json({
-                                totalPending: pendingRow.count,
-                                totalSettled: settledRow.count,
-                                approved: approvedRow.count,
-                                rejected: rejectedRow.count,
-                                pendingToday: pendingTodayRow.count,
-                                settledToday: settledTodayRow.count,
-                                totalAmount: amountRow.total || 0,
-                                agentPending: agentPendingRow.count,
+                                totalPending: Number(pendingRow.count || 0),
+                                totalSettled: Number(settledRow.count || 0),
+                                approved: Number(approvedRow.count || 0),
+                                rejected: Number(rejectedRow.count || 0),
+                                pendingToday: Number(pendingTodayRow.count || 0),
+                                settledToday: Number(settledTodayRow.count || 0),
+                                totalAmount: Number(amountRow.total || 0),
+                                invalidAmountCount: Number(amountRow.invalidAmountCount || 0),
+                                agentPending: Number(agentPendingRow.count || 0),
                                 brandStats: brandRows,
                                 brandTodayStats: brandTodayRows,
                                 activeUsers,
-                                received: receivedRow.count,
-                                notReceived: notReceivedRow.count
+                                received: Number(receivedRow.count || 0),
+                                notReceived: Number(notReceivedRow.count || 0)
                               });
 
                             });
@@ -4990,6 +5474,100 @@ app.get("/api/wallets/monitor", requireAnyPermission([
   });
 });
 
+app.put("/api/chatids/:id/gsheet", requirePermission("manage_chat_ids"), async (req, res) => {
+  const id = Number(req.params.id);
+  const gsheetLink = String(req.body.gsheetLink || "").trim();
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ success: false, message: "Invalid Chat ID row" });
+  }
+  if (gsheetLink && !extractAgentSpreadsheetId(gsheetLink)) {
+    return res.status(400).json({ success: false, message: "Invalid Google Sheet link or spreadsheet ID" });
+  }
+
+  try {
+    const result = await dbRun(`UPDATE chat_ids SET gsheetLink = ? WHERE id = ?`, [gsheetLink, id]);
+    if (!result.changes) return res.status(404).json({ success: false, message: "Chat ID row not found" });
+    addLog("INFO", `Chat ID GSheet link ${gsheetLink ? "updated" : "removed"} (ID ${id})`, getLogUser(req));
+    res.json({ success: true, gsheetLink });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get("/api/agent-gsheet/accounts", requirePermission("settings_access"), async (req, res) => {
+  try {
+    const accounts = await dbAll(`
+      SELECT a.id, a.accountName, a.enabled, a.createdAt,
+             (SELECT c.gsheetLink
+              FROM chat_ids c
+              WHERE UPPER(TRIM(c.agentName)) = UPPER(TRIM(a.accountName))
+                AND c.gsheetLink IS NOT NULL
+                AND TRIM(c.gsheetLink) != ''
+              ORDER BY c.id DESC
+              LIMIT 1) AS gsheetLink
+      FROM gsheet_allowed_accounts a
+      ORDER BY UPPER(a.accountName) ASC
+    `);
+    const availableRows = await dbAll(`
+      SELECT agentName FROM transactions WHERE agentName IS NOT NULL AND TRIM(agentName) != ''
+      UNION
+      SELECT agentName FROM video_cases WHERE agentName IS NOT NULL AND TRIM(agentName) != ''
+      UNION
+      SELECT agentName FROM chat_ids WHERE agentName IS NOT NULL AND TRIM(agentName) != ''
+    `);
+    const availableAccounts = [...new Set(availableRows.map(row => String(row.agentName || "").trim()).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }));
+    res.json({ success: true, accounts, availableAccounts });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post("/api/agent-gsheet/accounts", requirePermission("settings_access"), async (req, res) => {
+  const accountName = String(req.body.accountName || "").trim().replace(/\s+/g, " ").slice(0, 160);
+  if (!accountName) return res.status(400).json({ success: false, message: "Account name is required" });
+
+  try {
+    const existing = await dbGet(`
+      SELECT id FROM gsheet_allowed_accounts
+      WHERE UPPER(TRIM(accountName)) = ?
+      LIMIT 1
+    `, [normalizeAccountName(accountName)]);
+    if (existing) {
+      await dbRun(`UPDATE gsheet_allowed_accounts SET accountName = ?, enabled = 1 WHERE id = ?`, [accountName, existing.id]);
+    } else {
+      await dbRun(`INSERT INTO gsheet_allowed_accounts (accountName, enabled) VALUES (?, 1)`, [accountName]);
+    }
+    addLog("INFO", `Agent GSheet account enabled: ${accountName}`, getLogUser(req));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.delete("/api/agent-gsheet/accounts/:id", requirePermission("settings_access"), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ success: false, message: "Invalid account" });
+  try {
+    const row = await dbGet(`SELECT accountName FROM gsheet_allowed_accounts WHERE id = ?`, [id]);
+    await dbRun(`DELETE FROM gsheet_allowed_accounts WHERE id = ?`, [id]);
+    if (row) addLog("WARN", `Agent GSheet account disabled: ${row.accountName}`, getLogUser(req));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post("/api/agent-gsheet/sync", requirePermission("settings_access"), async (req, res) => {
+  try {
+    const result = await runAgentGsheetSync();
+    addLog("INFO", `Agent GSheet sync completed: ${result.pendingAppended} pending, ${result.videoAppended} VDO, ${result.answersImported} answers`, getLogUser(req));
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 app.post("/api/wallet/toggle", requirePermission("manage_wallets"), (req, res) => {
   const { id, action } = req.body;
 
@@ -5166,12 +5744,11 @@ app.get("/api/video-case/filters", requirePermission("view_page_video_case"), (r
   const response = { brands: [], agents: [] };
 
   db.all(`
-    SELECT TRIM(brand) as brand
+    SELECT DISTINCT TRIM(brand) as brand
     FROM video_cases
     ${pendingWhere}
       AND brand IS NOT NULL
       AND TRIM(brand) != ''
-    GROUP BY TRIM(brand)
     ORDER BY LOWER(TRIM(brand))
   `, [], (brandErr, brandRows) => {
     if (brandErr) {
@@ -5182,12 +5759,11 @@ app.get("/api/video-case/filters", requirePermission("view_page_video_case"), (r
     response.brands = brandRows.map(row => row.brand);
 
     db.all(`
-      SELECT TRIM(agentName) as agentName
+      SELECT DISTINCT TRIM(agentName) as agentName
       FROM video_cases
       ${pendingWhere}
         AND agentName IS NOT NULL
         AND TRIM(agentName) != ''
-      GROUP BY TRIM(agentName)
       ORDER BY LOWER(TRIM(agentName))
     `, [], (agentErr, agentRows) => {
       if (agentErr) {
@@ -6324,3 +6900,4 @@ app.get("/api/settlement", requirePermission("view_page_settlement"), (req, res)
   });
 
 });
+

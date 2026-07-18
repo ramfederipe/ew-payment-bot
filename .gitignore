@@ -2,8 +2,14 @@ node_modules/
 .env
 *.db
 *.sqbpro
+*.zip
 ngrok.exe
 Back UP/
 temp/
+tmp/
+output/
 uploads/
-credentials.json
+credentials/
+credentialsssss.json
+.deploy-aws-update/
+aws-public-index.html

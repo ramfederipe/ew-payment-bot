@@ -4,6 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "node webhook.js",
+    "migrate:postgres": "node scripts/migrate-sqlite-to-postgres.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -23,6 +25,7 @@
     "multer": "^2.1.1",
     "node-telegram-bot-api": "^0.67.0",
     "openai": "^6.35.0",
+    "pg": "^8.20.0",
     "socket.io": "^4.8.3",
     "sqlite3": "^6.0.1"
   }

@@ -6,7 +6,7 @@
     <header id="essCalcTopbar">
         <div>
             <div class="calc-title">ESS Calculator</div>
-            <div class="calc-subtitle">Basic and scientific modes</div>
+            <div class="calc-subtitle">Calculator and selected-row analysis</div>
         </div>
         <div class="calc-window-actions">
             <button id="calcMinimize" type="button" title="Minimize">
@@ -74,17 +74,117 @@
     </div>
 
     <div class="calc-page" id="operationsTab">
-        <div class="ops-card">
-            <div class="ops-label">Selected Rows Total</div>
-            <div class="ops-value" id="selectedRowsTotal">0</div>
-        </div>
-        <div class="ops-card">
-            <div class="ops-label">Settlement Compare</div>
-            <div class="calc-compare-row">
-                <input type="number" id="statementAmount" placeholder="Statement Amount">
-                <button id="compareSettlement" type="button">Compare</button>
+        <div class="ops-summary-grid">
+            <div class="ops-card ops-summary-card">
+                <div class="ops-label">Selected</div>
+                <div class="ops-value" id="opsSelectedCount">0</div>
             </div>
-            <div id="settlementDifference">Difference: 0</div>
+            <div class="ops-card ops-summary-card">
+                <div class="ops-label">Selected Balance</div>
+                <div class="ops-value" id="selectedRowsTotal">0.00</div>
+            </div>
+            <div class="ops-card ops-summary-card">
+                <div class="ops-label">Opening</div>
+                <div class="ops-value" id="opsOpeningTotal">0.00</div>
+            </div>
+            <div class="ops-card ops-summary-card">
+                <div class="ops-label">DP Limit</div>
+                <div class="ops-value" id="opsDpLimitTotal">0.00</div>
+            </div>
+        </div>
+
+        <div class="ops-card">
+            <div class="ops-card-heading">
+                <div>
+                    <div class="ops-label">Flexible Compare</div>
+                    <div class="ops-help">Compare selected totals or use your own amount.</div>
+                </div>
+            </div>
+
+            <div class="ops-form-grid">
+                <label class="ops-field">
+                    <span>Value A</span>
+                    <select id="opsCompareLeft">
+                        <option value="balance">Selected Balance</option>
+                        <option value="opening">Opening</option>
+                        <option value="dpLimit">DP Limit</option>
+                        <option value="remaining">Remaining</option>
+                        <option value="todayDp">Today DP</option>
+                        <option value="todayWd">Today WD</option>
+                        <option value="settlement">Settlement</option>
+                        <option value="apiBalance">API Balance</option>
+                    </select>
+                </label>
+
+                <label class="ops-field">
+                    <span>Compare with</span>
+                    <select id="opsCompareRight">
+                        <option value="custom">Custom Amount</option>
+                        <option value="balance">Selected Balance</option>
+                        <option value="opening">Opening</option>
+                        <option value="dpLimit">DP Limit</option>
+                        <option value="remaining">Remaining</option>
+                        <option value="todayDp">Today DP</option>
+                        <option value="todayWd">Today WD</option>
+                        <option value="settlement">Settlement</option>
+                        <option value="apiBalance">API Balance</option>
+                    </select>
+                </label>
+
+                <label class="ops-field" id="opsCustomAmountField">
+                    <span>Custom amount</span>
+                    <input type="number" id="opsCustomAmount" step="0.01" placeholder="Enter amount">
+                </label>
+
+                <label class="ops-field">
+                    <span>Function</span>
+                    <select id="opsCompareFunction">
+                        <option value="difference">Difference (A - B)</option>
+                        <option value="sum">Add (A + B)</option>
+                        <option value="percent">A as % of B</option>
+                        <option value="variance">Variance %</option>
+                        <option value="ratio">Ratio (A / B)</option>
+                        <option value="minimum">Smaller value</option>
+                        <option value="maximum">Larger value</option>
+                    </select>
+                </label>
+            </div>
+
+            <button id="opsRunCompare" class="ops-primary-btn" type="button">Calculate Comparison</button>
+
+            <div class="ops-result" id="opsCompareResult">
+                <div class="ops-result-label">Result</div>
+                <div class="ops-result-value" id="opsCompareValue">0.00</div>
+                <div class="ops-result-detail" id="opsCompareDetail">Choose values and a function.</div>
+                <button id="opsUseResult" class="ops-secondary-btn" type="button" disabled>Use in Calculator</button>
+            </div>
+        </div>
+
+        <div class="ops-card">
+            <div class="ops-card-heading">
+                <div>
+                    <div class="ops-label">Quick Analysis</div>
+                    <div class="ops-help">Statistics across the selected wallets.</div>
+                </div>
+                <select id="opsAnalysisMetric" aria-label="Analysis metric">
+                    <option value="balance">Balance</option>
+                    <option value="opening">Opening</option>
+                    <option value="dpLimit">DP Limit</option>
+                    <option value="remaining">Remaining</option>
+                    <option value="todayDp">Today DP</option>
+                    <option value="todayWd">Today WD</option>
+                    <option value="settlement">Settlement</option>
+                    <option value="apiBalance">API Balance</option>
+                </select>
+            </div>
+
+            <div class="ops-stat-grid">
+                <div><span>Total</span><strong id="opsStatTotal">0.00</strong></div>
+                <div><span>Average</span><strong id="opsStatAverage">0.00</strong></div>
+                <div><span>Minimum</span><strong id="opsStatMinimum">0.00</strong></div>
+                <div><span>Maximum</span><strong id="opsStatMaximum">0.00</strong></div>
+            </div>
+            <div class="ops-analysis-meta" id="opsAnalysisMeta">0 non-zero · 0 negative</div>
         </div>
     </div>
 

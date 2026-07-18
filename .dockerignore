@@ -1,0 +1,11 @@
+node_modules
+npm-debug.log
+.git
+.env
+*.db
+*.sqbpro
+backup
+temp
+uploads
+credentials
+credentialsssss.json

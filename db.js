@@ -1,19 +1,29 @@
-const sqlite3 = require("sqlite3").verbose();
+require("dotenv").config();
 const path = require("path");
 
 const dbPath = path.join(__dirname, "database.db");
+const requestedClient = String(process.env.DB_CLIENT || "").toLowerCase();
+const usePostgres = requestedClient === "postgres"
+  || (requestedClient !== "sqlite" && Boolean(process.env.DATABASE_URL));
 
-const db = new sqlite3.Database(dbPath, (err) => {
+let db;
 
-  if (err) {
-    console.error("❌ DB Connection Failed:", err.message);
+if (usePostgres) {
+  const { createPostgresDatabase } = require("./lib/postgresDatabase");
+  db = createPostgresDatabase();
+} else {
+  const sqlite3 = require("sqlite3").verbose();
 
-  } else {
-    console.log("✅ Connected to SQLite");
-  }
+  db = new sqlite3.Database(dbPath, (err) => {
+    if (err) {
+      console.error("DB Connection Failed:", err.message);
+    } else {
+      console.log("Connected to SQLite");
+    }
+  });
 
-});
-
+  db.client = "sqlite";
+}
 db.serialize(() => {
 
 
@@ -197,6 +207,21 @@ db.run(`
 db.run(`
   CREATE INDEX IF NOT EXISTS idx_transactions_deposit_ref
   ON transactions(depositId, transactionReference)
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_transactions_action_id
+  ON transactions(actionStatus, id DESC)
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_transactions_pending_filters
+  ON transactions(actionStatus, brand, essStatus, agentStatus, sent, smsMatched, id DESC)
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_transactions_agent_name
+  ON transactions(agentName)
 `);
 
 db.run(`
@@ -539,8 +564,37 @@ db.run(`
       agentName TEXT,
       groupName TEXT,
       chatId TEXT,
-      type TEXT
+      type TEXT,
+      gsheetLink TEXT
     )
+  `);
+
+  db.all(`PRAGMA table_info(chat_ids)`, (err, rows) => {
+    if (err) {
+      console.error("Failed to inspect chat_ids columns:", err);
+      return;
+    }
+
+    if (!(rows || []).some(row => String(row.name || "").toLowerCase() === "gsheetlink")) {
+      db.run(`ALTER TABLE chat_ids ADD COLUMN gsheetLink TEXT`, alterErr => {
+        if (alterErr) console.error("Failed to add chat_ids.gsheetLink:", alterErr);
+        else console.log("Added chat_ids column: gsheetLink");
+      });
+    }
+  });
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS gsheet_allowed_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      accountName TEXT UNIQUE,
+      enabled INTEGER DEFAULT 1,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_gsheet_allowed_accounts_name
+    ON gsheet_allowed_accounts(accountName)
   `);
 
   // =========================
@@ -597,6 +651,7 @@ db.run(`
     settlementAmountColumn TEXT DEFAULT 'Amount',
     settlementDateColumn TEXT DEFAULT 'Date',
     balanceCalculationSettings TEXT,
+    balanceWatchlistSections TEXT,
     walletTypes TEXT,
     balanceTodaySource TEXT DEFAULT 'upload',
     formatTransactionAmounts INTEGER DEFAULT 1
@@ -767,6 +822,13 @@ db.all(`PRAGMA table_info(settings)`, (err, rows) => {
       `
     },
     {
+      name: "balanceWatchlistSections",
+      sql: `
+        ALTER TABLE settings
+        ADD COLUMN balanceWatchlistSections TEXT
+      `
+    },
+    {
       name: "walletTypes",
       sql: `
         ALTER TABLE settings
@@ -822,4 +884,7 @@ VALUES
 
 module.exports = db;
 
-console.log("📁 DB PATH:", dbPath);
+console.log("DB CLIENT:", db.client || (usePostgres ? "postgres" : "sqlite"));
+if (!usePostgres) {
+  console.log("DB PATH:", dbPath);
+}
